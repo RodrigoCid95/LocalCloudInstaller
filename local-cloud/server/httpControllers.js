@@ -170,10 +170,14 @@ function verifyDevMode() {
 }
 
 // controllers/middlewares/dev-mode.ts
-function devMode(_, res, next) {
+function devMode(req, res, next) {
   const model = verifyDevMode.bind(this)();
   if (model) {
-    res.redirect(model.devMode.config.cors);
+    if (req.path !== "/") {
+      res.redirect("/");
+    } else {
+      next();
+    }
   } else {
     next();
   }
@@ -1793,7 +1797,11 @@ APIController = __decorateClass([
 var { GET: GET11 } = METHODS;
 var IndexController = class {
   dashboard(_, res) {
-    res.render("dashboard", { title: "LocalCloud - Dashboard", description: "LocalCloud - Dashboard" });
+    if (this.devModeModel.devMode.config.enable) {
+      res.render("dev", { title: "LocalCloud - Dev Mode", description: "LocalCloud - Modo de desarrollo" });
+    } else {
+      res.render("dashboard", { title: "LocalCloud - Dashboard", description: "LocalCloud - Dashboard" });
+    }
   }
   login(_, res) {
     res.render("login", { title: "LocalCloud - Iniciar sesi\xF3n", description: "LocalCloud - Iniciar sesi\xF3n" });

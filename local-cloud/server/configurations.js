@@ -99,7 +99,7 @@ var system;
 if (isRelease) {
   system = import_node_path2.default.resolve("/", "var", "lc");
 } else {
-  system = import_node_path2.default.resolve(".");
+  system = import_node_path2.default.resolve(".", "lc");
 }
 var systemApps = import_node_path2.default.join(system, "apps");
 var systemApp = import_node_path2.default.join(system, "apps", ":packagename");

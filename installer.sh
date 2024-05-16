@@ -57,16 +57,16 @@ if ! grep -q "^lc:" /etc/group; then
     groupadd lc
 fi
 
-id=0
+uid=0
 while true; do
     read -p "Ingresa un nombre de usuario: " user_name
-    if id "$user_name" &>/dev/null; then
+    result=$(getent passwd | awk -F: '{ print $1}' | grep -w "$user_name")
+    if [ -n "$result" ]; then
         echo "El usuario $user_name ya existe. Intenta con otro nombre de usuario."
     else
         read -p "Ingresa una contraseña: " -s password
-        json="{\"email\": \"\",\"full_name\": \"\",\"phone\": \"\",\"name\": \"$user_name\",\"password\": \"$password\"}"
-        curl -X POST -H "Content-Type: application/json" -d "$json" -s http://localhost:3001/api/users
-        id=$(id -u "$user_name")
+        curl -X POST -H "Content-Type: application/json" -d "{\"email\": \"\",\"full_name\": \"\",\"phone\": \"\",\"name\": \"$user_name\",\"password\": \"$password\"}" -s http://localhost:3001/api/users
+        uid=$(id -u "$user_name")
         break
     fi
 done
@@ -83,8 +83,7 @@ for file in "$apps_directory"/*; do
     fi
 done
 for name_app in "${apps[@]}"; do
-    json="{\"uid\":\"$id\", \"package_name\":\"$name_app\"}"
-    curl -X POST -H "Content-Type: application/json" -d "$json" -s http://localhost:3001/api/users/assign-app
+    curl -X POST -H "Content-Type: application/json" -d "{\"uid\":\"$uid\", \"package_name\":\"$name_app\"}" -s http://localhost:3001/api/users/assign-app
 done
 
 systemctl stop local-cloud
