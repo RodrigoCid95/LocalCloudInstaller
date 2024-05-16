@@ -718,6 +718,16 @@ var import_node_fs5 = __toESM(require("node:fs"));
 var import_node_child_process2 = __toESM(require("node:child_process"));
 var import_shell_quote = __toESM(require("shell-quote"));
 var import_ini = __toESM(require("ini"));
+var run = ({ title, command, args, proc }) => new Promise((resolve) => {
+  const TITLE = `[${title}]:`;
+  const child_process = import_node_child_process2.default.spawn(command, args);
+  child_process.on("close", resolve);
+  child_process.stdout.on("data", (data) => console.log(TITLE, data.toString("utf8")));
+  child_process.stderr.on("data", (data) => console.error(TITLE, data.toString("utf8")));
+  if (proc) {
+    proc(child_process.stdin);
+  }
+});
 var UsersModel = class {
   loadConfig(name) {
     const SMB_CONFIG = import_node_fs5.default.readFileSync(this.paths.samba, "utf8");
@@ -730,7 +740,11 @@ var UsersModel = class {
   writeConfig(config) {
     const smbStrConfig = import_ini.default.stringify(config);
     import_node_fs5.default.writeFileSync(this.paths.samba, smbStrConfig, "utf8");
-    console.log(import_node_child_process2.default.execSync("/etc/init.d/smbd restart").toString("utf8"));
+    run({
+      title: "Restart Samba",
+      command: "/etc/init.d/smbd",
+      args: ["restart"]
+    });
   }
   setConfig(name, config) {
     const smbConfig = this.loadConfig();
@@ -779,17 +793,35 @@ var UsersModel = class {
   }
   async createUser(user) {
     const { name, password, full_name = "", email = "", phone = "" } = user;
-    const PASSWORD = this.encrypt.createHash(password);
-    const cmd = `useradd -p '${PASSWORD}' -m -G lc -s /bin/bash -c ${import_shell_quote.default.quote([[full_name, email, phone].join(",")]).replace(/\\/g, "")} ${name}`;
-    await new Promise((resolve) => import_node_child_process2.default.exec(cmd, () => resolve()));
-    await new Promise((resolve) => {
-      const child_process = import_node_child_process2.default.spawn("smbpasswd", ["-a", name]);
-      child_process.on("close", resolve);
-      child_process.stdin.write(`${password}
+    console.log(`---------------------------- Create User: ${name} ----------------------------`);
+    await run({
+      title: "Create User",
+      command: "useradd",
+      args: ["-m", "-G", "lc", "-s", "/bin/bash", "-c", import_shell_quote.default.quote([[full_name, email, phone].join(",")]).replace(/\\/g, ""), name]
+    });
+    await run({
+      title: "Set Password To New User",
+      command: "passwd",
+      args: [name],
+      proc(stdin) {
+        stdin.write(`${password}
 `);
-      child_process.stdin.write(`${password}
+        stdin.write(`${password}
 `);
-      child_process.stdin.end();
+        stdin.end();
+      }
+    });
+    await run({
+      title: "Set New User In Samba",
+      command: "smbpasswd",
+      args: ["-a", name],
+      proc(stdin) {
+        stdin.write(`${password}
+`);
+        stdin.write(`${password}
+`);
+        stdin.end();
+      }
     });
     this.setConfig(name, {
       comment: `Directorio de ${name}`,
@@ -801,6 +833,7 @@ var UsersModel = class {
       "write list": name,
       "read only": "yes"
     });
+    console.log("------------------------------ End Create User ----------------------------------");
   }
   getUser(name) {
     const USER_LIST = this.loadUserList(true);
@@ -820,60 +853,75 @@ var UsersModel = class {
     const hash = this.loadHash(name);
     return this.encrypt.verifyHash(password, hash);
   }
-  updateUser(name, user) {
+  async updateUser(name, user) {
     const { full_name = "", email = "", phone = "" } = user;
-    const newValue = [full_name, email, phone].join(",");
-    const cmd = import_shell_quote.default.parse(
-      'usermod -c "$GECOS" $USER_NAME',
-      {
-        GECOS: import_shell_quote.default.quote([newValue]),
-        USER_NAME: name
-      }
-    ).join(" ");
-    console.log(`(${cmd}):`, import_node_child_process2.default.execSync(cmd).toString("utf8"));
+    await run({
+      title: `Update User ${name}`,
+      command: "usermod",
+      args: ["-c", import_shell_quote.default.quote([[full_name, email, phone].join(",")]), name]
+    });
   }
   async updatePassword(name, password) {
-    const PASSWORD = this.encrypt.createHash(password);
-    let cmd = import_shell_quote.default.parse(
-      `usermod PASSWORD $USER_NAME`,
-      { USER_NAME: import_shell_quote.default.quote([name]) }
-    ).join(" ").replace("PASSWORD", `-p '${PASSWORD}'`);
-    console.log(`(${cmd}):`, import_node_child_process2.default.execSync(cmd).toString("utf8"));
-    cmd = import_shell_quote.default.parse(
-      `smbpasswd -x $USER_NAME`,
-      { USER_NAME: import_shell_quote.default.quote([name]) }
-    ).join(" ");
-    console.log(`(${cmd}):`, import_node_child_process2.default.execSync(cmd).toString("utf8"));
-    await new Promise((resolve) => {
-      const child_process = import_node_child_process2.default.spawn("smbpasswd", [name]);
-      child_process.on("close", resolve);
-      child_process.stdin.write(`${password}
+    console.log(`----------------------------Update password: ${name}----------------------------`);
+    const USER_NAME = import_shell_quote.default.quote([name]);
+    await run({
+      title: `Update Password To User ${name}`,
+      command: "passwd",
+      args: [USER_NAME],
+      proc(stdin) {
+        stdin.write(`${password}
 `);
-      child_process.stdin.write(`${password}
+        stdin.write(`${password}
 `);
-      child_process.stdin.end();
+        stdin.end();
+      }
     });
+    await run({
+      title: `Delete ${name} In Samba`,
+      command: "smbpasswd",
+      args: ["-x", USER_NAME]
+    });
+    await run({
+      title: `Delete ${name} In Samba`,
+      command: "smbpasswd",
+      args: ["-x", USER_NAME]
+    });
+    await run({
+      title: `Set User ${name} In Samba`,
+      command: "smbpasswd",
+      args: ["-a", USER_NAME],
+      proc(stdin) {
+        stdin.write(`${password}
+`);
+        stdin.write(`${password}
+`);
+        stdin.end();
+      }
+    });
+    console.log("----------------------------End update password --------------------------------");
   }
   async deleteUser(name) {
+    console.log(`---------------------------- Delete User: ${name} ----------------------------`);
     const USER_NAME = import_shell_quote.default.quote([name]);
-    await new Promise((resolve) => {
-      const child_process = import_node_child_process2.default.spawn("smbpasswd", ["-x", USER_NAME]);
-      child_process.stderr.on("error", (error) => console.trace(error));
-      child_process.on("close", resolve);
+    await run({
+      title: `Delete User ${name} In Samba`,
+      command: "smbpasswd",
+      args: ["-x", USER_NAME]
     });
-    await new Promise((resolve) => {
-      const child_process = import_node_child_process2.default.spawn("pkill", ["-u", USER_NAME]);
-      child_process.stderr.on("error", (error) => console.trace(error));
-      child_process.on("close", resolve);
+    await run({
+      title: `Kill proccess Of ${name}`,
+      command: "pkill",
+      args: ["-u", USER_NAME]
     });
-    await new Promise((resolve) => {
-      const child_process = import_node_child_process2.default.spawn("userdel", ["-r", USER_NAME]);
-      child_process.stderr.on("error", (error) => console.trace(error));
-      child_process.on("close", resolve);
+    await run({
+      title: `Delete User ${name}`,
+      command: "userdel",
+      args: ["-r", USER_NAME]
     });
     const smbConfig = this.loadConfig();
     delete smbConfig[name];
     this.writeConfig(smbConfig);
+    console.log("------------------------------ End Delete User ----------------------------------");
   }
   async assignApp(uid, package_name) {
     await new Promise((resolve) => this.database.run(

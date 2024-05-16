@@ -1350,7 +1350,7 @@ var ProfileAPIController = class {
     }));
     res.json(apps);
   }
-  update(req, res) {
+  async update(req, res) {
     if (req.session.user) {
       const { user_name, full_name, email, phone } = req.body;
       if (user_name) {
@@ -1363,7 +1363,7 @@ var ProfileAPIController = class {
           return;
         }
       }
-      this.usersModel.updateUser(
+      await this.usersModel.updateUser(
         req.session.user.name,
         { full_name, email, phone }
       );
@@ -1652,7 +1652,7 @@ var UsersAPIController = class {
     });
     res.json(true);
   }
-  update(req, res) {
+  async update(req, res) {
     const { full_name, email, phone } = req.body;
     const result = this.usersModel.getUserByUID(Number(req.params.uid));
     if (!result) {
@@ -1662,7 +1662,7 @@ var UsersAPIController = class {
       });
       return;
     }
-    this.usersModel.updateUser(result.name, { full_name, email, phone });
+    await this.usersModel.updateUser(result.name, { full_name, email, phone });
     res.json(true);
   }
   async delete(req, res) {
