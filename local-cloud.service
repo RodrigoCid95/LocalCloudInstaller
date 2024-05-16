@@ -9,6 +9,8 @@ Restart=always
 User=root
 Environment=PATH=/usr/bin:/usr/local/bin
 Environment=NODE_ENV=production
+StandardOutput=append:/var/log/local-cloud/local-cloud.log
+StandardError=append:/var/log/local-cloud/local-cloud-error.log
 
 [Install]
 WantedBy=multi-user.target

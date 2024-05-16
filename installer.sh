@@ -49,6 +49,7 @@ chmod +x ./run.sh
 npm i
 cd "$initial_path"
 cp ./local-cloud.service /etc/systemd/system
+mkdir /var/log/local-cloud
 systemctl daemon-reload
 systemctl enable local-cloud
 systemctl start local-cloud
