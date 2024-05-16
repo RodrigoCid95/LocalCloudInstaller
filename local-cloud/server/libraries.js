@@ -348,28 +348,6 @@ var paths = async () => {
   if (!import_node_fs.default.existsSync(paths2.apps)) {
     import_node_fs.default.mkdirSync(paths2.apps);
   }
-  if (!import_node_fs.default.existsSync(paths2.shared)) {
-    const GROUP_CONTENT = import_node_fs.default.readFileSync(paths2.groups, "utf8");
-    const GROUP_LINES = GROUP_CONTENT.split("\n").filter((line) => line !== "");
-    const [GROUP] = GROUP_LINES.map((line) => line.split(":")).map((line) => ({
-      id: Number(line[2]),
-      name: line[0],
-      users: line[3].split(",")
-    })).filter((group) => group.name === "lc");
-    if (!GROUP) {
-      await new Promise((resolve) => {
-        const child_process = (0, import_node_child_process.spawn)("groupadd", ["lc"]);
-        child_process.on("close", resolve);
-        child_process.stdin.end();
-      });
-    }
-    import_node_fs.default.mkdirSync(paths2.shared, { recursive: true });
-    await new Promise((resolve) => {
-      const child_process = (0, import_node_child_process.spawn)("chown", ["lc", paths2.shared]);
-      child_process.on("close", resolve);
-      child_process.stdin.end();
-    });
-  }
   const SMB_CONFIG = import_node_fs.default.readFileSync(paths2.samba, "utf8");
   const smbConfig = import_ini.default.parse(SMB_CONFIG);
   if (!smbConfig["Carpeta Compartida"]) {

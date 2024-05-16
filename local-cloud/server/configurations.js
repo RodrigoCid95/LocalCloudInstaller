@@ -84,16 +84,59 @@ var builderConnector = {
 };
 
 // config/http.ts
-var import_node_path2 = __toESM(require("node:path"));
+var import_node_path3 = __toESM(require("node:path"));
 var import_express_session = __toESM(require("express-session"));
 var import_compression = __toESM(require("compression"));
 var import_liquidjs = require("liquidjs");
 var import_uuid = require("uuid");
 
 // config/dev-mode.ts
+var import_node_fs = __toESM(require("node:fs"));
+
+// config/paths.ts
+var import_node_path2 = __toESM(require("node:path"));
+var system;
+if (isRelease) {
+  system = import_node_path2.default.resolve("/", "var", "lc");
+} else {
+  system = import_node_path2.default.resolve(".");
+}
+var systemApps = import_node_path2.default.join(system, "apps");
+var systemApp = import_node_path2.default.join(system, "apps", ":packagename");
+var systemDatabases = import_node_path2.default.join(systemApp, "data");
+var paths = {
+  samba: "/etc/samba/smb.conf",
+  shadow: "/etc/shadow",
+  passwd: "/etc/passwd",
+  groups: "/etc/group",
+  system: {
+    path: system,
+    apps: {
+      path: systemApps,
+      app: {
+        path: systemApp,
+        public: import_node_path2.default.join(systemApp, "public"),
+        databases: {
+          path: systemDatabases,
+          database: import_node_path2.default.join(systemDatabases, ":name.db")
+        }
+      }
+    },
+    database: import_node_path2.default.join(system, "system.db")
+  },
+  users: {
+    shared: import_node_path2.default.join("/", "shared"),
+    path: import_node_path2.default.join("/", "home"),
+    recycleBin: import_node_path2.default.join("/", "recycler-bin")
+  }
+};
+
+// config/dev-mode.ts
 var enable = false;
 var user = flags.get("user");
 if (user) {
+  enable = true;
+} else if (!import_node_fs.default.existsSync(paths.system.path)) {
   enable = true;
 }
 var devMode = { enable, user };
@@ -118,10 +161,10 @@ var HTTP = {
     name: "liquid",
     ext: "liquid",
     callback: new import_liquidjs.Liquid({
-      layouts: import_node_path2.default.resolve(__dirname, "..", "views"),
+      layouts: import_node_path3.default.resolve(__dirname, "..", "views"),
       extname: "liquid"
     }).express(),
-    dirViews: import_node_path2.default.resolve(__dirname, "..", "views")
+    dirViews: import_node_path3.default.resolve(__dirname, "..", "views")
   },
   middlewares,
   events: {
@@ -136,42 +179,9 @@ var HTTP = {
   pathsPublic: [
     {
       route: "/",
-      dir: import_node_path2.default.resolve(__dirname, "..", "public")
+      dir: import_node_path3.default.resolve(__dirname, "..", "public")
     }
   ]
-};
-
-// config/paths.ts
-var import_node_path3 = __toESM(require("node:path"));
-var system = import_node_path3.default.resolve(isRelease ? "/" : ".", "lc");
-var systemApps = import_node_path3.default.join(system, "apps");
-var systemApp = import_node_path3.default.join(system, "apps", ":packagename");
-var systemDatabases = import_node_path3.default.join(systemApp, "data");
-var paths = {
-  samba: "/etc/samba/smb.conf",
-  shadow: "/etc/shadow",
-  passwd: "/etc/passwd",
-  groups: "/etc/group",
-  system: {
-    path: system,
-    apps: {
-      path: systemApps,
-      app: {
-        path: systemApp,
-        public: import_node_path3.default.join(systemApp, "public"),
-        databases: {
-          path: systemDatabases,
-          database: import_node_path3.default.join(systemDatabases, ":name.db")
-        }
-      }
-    },
-    database: import_node_path3.default.join(system, "system.db")
-  },
-  users: {
-    shared: import_node_path3.default.join("/", "shared"),
-    path: import_node_path3.default.join("/", "home"),
-    recycleBin: import_node_path3.default.join("/", "recycler-bin")
-  }
 };
 
 // config/databases.ts
