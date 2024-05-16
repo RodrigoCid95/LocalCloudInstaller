@@ -5,7 +5,7 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-local service_name="local-cloud"
+service_name="local-cloud"
 
 if systemctl list-units --type=service --all | grep -q "local-cloud"; then
     echo "LocalCloud ya está instalando."
@@ -45,11 +45,11 @@ if ! dpkg -l | grep -qw samba; then
 fi
 
 initial_path=$(pwd)
-cp ./local-cloud.service /etc/systemd/system
-systemctl daemon-reload
 cp -r ./local-cloud /etc
 cd /etc/local-cloud
 npm i
+cp ./local-cloud.service /etc/systemd/system
+systemctl daemon-reload
 chmod +x run.sh
 systemctl enable local-cloud.service
 systemctl daemon-reload
