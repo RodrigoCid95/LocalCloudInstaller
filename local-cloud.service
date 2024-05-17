@@ -3,8 +3,7 @@ Description=Servidor Node.js
 After=network.target
 
 [Service]
-ExecStart=/etc/local-cloud/run.sh
-WorkingDirectory=/etc/local-cloud
+ExecStart=/usr/bin/node /etc/local-cloud/server/main.js -- --type http
 Restart=always
 User=root
 Environment=PATH=/usr/bin:/usr/local/bin

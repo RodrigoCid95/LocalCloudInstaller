@@ -724,6 +724,7 @@ var run = ({ title, command, args, proc }) => new Promise((resolve) => {
   child_process.on("close", resolve);
   child_process.stdout.on("data", (data) => console.log(TITLE, data.toString("utf8")));
   child_process.stderr.on("data", (data) => console.error(TITLE, data.toString("utf8")));
+  child_process.on("error", (error) => console.log(TITLE, error.message));
   if (proc) {
     proc(child_process.stdin);
   }
@@ -796,7 +797,7 @@ var UsersModel = class {
     console.log(`---------------------------- Create User: ${name} ----------------------------`);
     await run({
       title: "Create User",
-      command: "useradd",
+      command: "/usr/sbin/useradd",
       args: ["-m", "-G", "lc", "-s", "/bin/bash", "-c", import_shell_quote.default.quote([[full_name, email, phone].join(",")]).replace(/\\/g, ""), name]
     });
     await run({
@@ -857,7 +858,7 @@ var UsersModel = class {
     const { full_name = "", email = "", phone = "" } = user;
     await run({
       title: `Update User ${name}`,
-      command: "usermod",
+      command: "/usr/sbin/usermod",
       args: ["-c", import_shell_quote.default.quote([[full_name, email, phone].join(",")]), name]
     });
   }
@@ -875,11 +876,6 @@ var UsersModel = class {
 `);
         stdin.end();
       }
-    });
-    await run({
-      title: `Delete ${name} In Samba`,
-      command: "smbpasswd",
-      args: ["-x", USER_NAME]
     });
     await run({
       title: `Delete ${name} In Samba`,
@@ -915,7 +911,7 @@ var UsersModel = class {
     });
     await run({
       title: `Delete User ${name}`,
-      command: "userdel",
+      command: "/usr/sbin/userdel",
       args: ["-r", USER_NAME]
     });
     const smbConfig = this.loadConfig();
