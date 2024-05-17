@@ -802,18 +802,6 @@ var UsersModel = class {
       args: ["-p", PASSWORD, "-m", "-G", "lc", "-s", "/bin/bash", "-c", import_shell_quote.default.quote([[full_name, email, phone].join(",")]).replace(/\\/g, ""), name]
     });
     await run({
-      title: "Set Password To New User",
-      command: "passwd",
-      args: [name],
-      proc(stdin) {
-        stdin.write(`${password}
-`);
-        stdin.write(`${password}
-`);
-        stdin.end();
-      }
-    });
-    await run({
       title: "Set New User In Samba",
       command: "smbpasswd",
       args: ["-a", name],
