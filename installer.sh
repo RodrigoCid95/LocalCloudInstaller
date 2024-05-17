@@ -45,7 +45,6 @@ fi
 initial_path=$(pwd)
 cp -r ./local-cloud /etc
 cd /etc/local-cloud
-chmod +x ./run.sh
 npm i
 cd "$initial_path"
 cp ./local-cloud.service /etc/systemd/system
