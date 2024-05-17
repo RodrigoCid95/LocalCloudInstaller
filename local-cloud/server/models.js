@@ -795,10 +795,11 @@ var UsersModel = class {
   async createUser(user) {
     const { name, password, full_name = "", email = "", phone = "" } = user;
     console.log(`---------------------------- Create User: ${name} ----------------------------`);
+    const PASSWORD = this.encrypt.createHash(password);
     await run({
       title: "Create User",
       command: "/usr/sbin/useradd",
-      args: ["-m", "-G", "lc", "-s", "/bin/bash", "-c", import_shell_quote.default.quote([[full_name, email, phone].join(",")]).replace(/\\/g, ""), name]
+      args: ["-p", PASSWORD, "-m", "-G", "lc", "-s", "/bin/bash", "-c", import_shell_quote.default.quote([[full_name, email, phone].join(",")]).replace(/\\/g, ""), name]
     });
     await run({
       title: "Set Password To New User",
