@@ -10,5 +10,4 @@ rm -R /etc/local-cloud
 cp -R ./local-cloud /etc
 cd /etc/local-cloud
 npm i
-chmod +x run.sh
 systemctl start local-cloud
