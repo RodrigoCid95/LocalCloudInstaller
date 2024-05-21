@@ -101,9 +101,6 @@ if (isRelease) {
 } else {
   system = import_node_path2.default.resolve(".", "lc");
 }
-var systemApps = import_node_path2.default.join(system, "apps");
-var systemApp = import_node_path2.default.join(system, "apps", ":packagename");
-var systemDatabases = import_node_path2.default.join(systemApp, "data");
 var paths = {
   samba: "/etc/samba/smb.conf",
   shadow: "/etc/shadow",
@@ -111,17 +108,9 @@ var paths = {
   groups: "/etc/group",
   system: {
     path: system,
-    apps: {
-      path: systemApps,
-      app: {
-        path: systemApp,
-        public: import_node_path2.default.join(systemApp, "public"),
-        databases: {
-          path: systemDatabases,
-          database: import_node_path2.default.join(systemDatabases, ":name.db")
-        }
-      }
-    },
+    apps: import_node_path2.default.join(system, "apps"),
+    appsTemplates: import_node_path2.default.resolve(__dirname, "..", "views", "apps"),
+    storages: import_node_path2.default.join(system, "storages"),
     database: import_node_path2.default.join(system, "system.db")
   },
   users: {
@@ -155,7 +144,6 @@ if (devMode.enable) {
   middlewares.push((0, import_cors.default)());
 }
 var HTTP = {
-  /* port: 80, */
   optionsUrlencoded: { extended: true },
   engineTemplates: {
     name: "liquid",

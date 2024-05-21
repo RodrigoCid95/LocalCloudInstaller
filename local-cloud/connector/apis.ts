@@ -1,18 +1,42 @@
 import type { ServerConector } from 'connector/Server'
 
-const ACCESS_SHARED_FILE_LIST = (server: ServerConector): FS.SharedLsMethod => path => server.send({
-  endpoint: 'fs/shared/list',
-  method: 'post',
-  data: { path }
-})
+const ACCESS_SHARED_FILE_LIST = (server: ServerConector): FS.SharedLsMethod => (path, filter) => {
+  const params = {}
+  if (filter) {
+    if (filter.ext) {
+      params['ext'] = filter.ext.join(',')
+    }
+    if (filter.showHidden) {
+      params['showHidden'] = true
+    }
+  }
+  return server.send({
+    endpoint: 'fs/shared/list',
+    method: 'post',
+    data: { path },
+    params
+  })
+}
 
 export { ACCESS_SHARED_FILE_LIST }
 
-const ACCESS_USER_FILE_LIST = (server: ServerConector): FS.UserLsMethod => path => server.send({
-  endpoint: 'fs/user/list',
-  method: 'post',
-  data: { path }
-})
+const ACCESS_USER_FILE_LIST = (server: ServerConector): FS.UserLsMethod => (path, filter) => {
+  const params = {}
+  if (filter) {
+    if (filter.ext) {
+      params['ext'] = filter.ext.join(',')
+    }
+    if (filter.showHidden) {
+      params['showHidden'] = true
+    }
+  }
+  return server.send({
+    endpoint: 'fs/user/list',
+    method: 'post',
+    data: { path },
+    params
+  })
+}
 
 export { ACCESS_USER_FILE_LIST }
 
@@ -323,3 +347,30 @@ const USER_LIST = (server: ServerConector): Users.ListMethod => () => server.sen
 })
 
 export { USER_LIST }
+
+const STORAGE = (server: ServerConector): Storage.Connector => ({
+  global: {
+    set: (name, data) => server.send({
+      endpoint: `storage/${name}`,
+      method: 'put',
+      data: { content: data }
+    }),
+    get: (name) => server.send({
+      endpoint: `storage/${name}`,
+      method: 'get'
+    })
+  },
+  user: {
+    set: (name, data) => server.send({
+      endpoint: `storage/user/${name}`,
+      method: 'put',
+      data: { content: data }
+    }),
+    get: (name) => server.send({
+      endpoint: `storage/user/${name}`,
+      method: 'get'
+    })
+  }
+})
+
+export { STORAGE }

@@ -48,6 +48,7 @@ __export(models_exports, {
   RecycleBinModel: () => RecycleBinModel,
   SharedModel: () => SharedModel,
   SourcesModel: () => SourcesModel,
+  StorageModel: () => StorageModel,
   UsersModel: () => UsersModel
 });
 module.exports = __toCommonJS(models_exports);
@@ -120,12 +121,14 @@ var AppsModel = class {
       title: result.title,
       description: result.description,
       author: result.author,
-      extensions: (result.extensions || "").split("|")
+      extensions: (result.extensions || "").split("|"),
+      useStorage: result.use_storage === 1 ? true : false,
+      useTemplate: result.use_template === 1 ? true : false
     }));
   }
   getAppsByUID(uid) {
     return new Promise((resolve) => this.database.all(
-      "SELECT apps.package_name, apps.title, apps.description, apps.author FROM users_to_apps INNER JOIN apps ON users_to_apps.package_name = apps.package_name WHERE users_to_apps.uid = ?;",
+      "SELECT apps.package_name, apps.title, apps.description, apps.author, apps.use_storage, apps.use_template FROM users_to_apps INNER JOIN apps ON users_to_apps.package_name = apps.package_name WHERE users_to_apps.uid = ?;",
       [uid],
       (error, rows) => error ? resolve([]) : resolve(this.parse(rows))
     ));
@@ -147,6 +150,20 @@ var AppsModel = class {
     const tempDir = import_node_path.default.join(this.paths.apps, "temp", (0, import_uuid.v4)());
     import_node_fs.default.mkdirSync(tempDir, { recursive: true });
     await import_unzipper.default.Open.buffer(data).then((d) => d.extract({ path: tempDir }));
+    let useTemplate = false;
+    let template = '{% layout "layout.liquid" %}';
+    const headPath = import_node_path.default.join(tempDir, "head.html");
+    if (import_node_fs.default.existsSync(headPath)) {
+      useTemplate = true;
+      const headContent = import_node_fs.default.readFileSync(headPath, "utf8");
+      template += `{% block head %}${headContent}{% endblock %}`;
+    }
+    const bodyPath = import_node_path.default.join(tempDir, "body.html");
+    if (import_node_fs.default.existsSync(bodyPath)) {
+      useTemplate = true;
+      const bodyContent = import_node_fs.default.readFileSync(bodyPath, "utf8");
+      template += `{% block body %}${bodyContent}{% endblock %}`;
+    }
     const manifestPath = import_node_path.default.join(tempDir, "manifest.json");
     if (!import_node_fs.default.existsSync(manifestPath)) {
       import_node_fs.default.rmSync(tempDir, { recursive: true, force: true });
@@ -180,14 +197,14 @@ var AppsModel = class {
         message: "El archivo manifest.json no contiene un autor."
       };
     }
-    const { title, description = "Sin descripci\xF3n", author, permissions: permissionList = {}, sources = [], extensions = [] } = manifestContent;
+    const { title, description = "Sin descripci\xF3n", author, permissions: permissionList = {}, sources = {}, extensions = [], "use-storage": useStorage = false } = manifestContent;
     const permissions = Object.keys(permissionList).map((api) => ({
       api,
       justification: permissionList[api]
     }));
     await new Promise((resolve) => this.database.run(
-      "INSERT INTO apps (package_name, title, description, author, extensions) VALUES (?, ?, ?, ?, ?);",
-      [package_name, title, description, author, extensions.join("|")],
+      "INSERT INTO apps (package_name, title, description, author, extensions, use_storage, use_template) VALUES (?, ?, ?, ?, ?, ?, ?);",
+      [package_name, title, description, author, extensions.join("|"), useStorage ? 1 : 0, useTemplate ? 1 : 0],
       resolve
     ));
     for (const permission of permissions) {
@@ -197,15 +214,27 @@ var AppsModel = class {
         resolve
       ));
     }
-    for (const source of sources) {
-      await new Promise((resolve) => this.database.run(
-        "INSERT INTO secure_sources (package_name, type, source, justification, active) VALUES (?, ?, ?, ?, ?)",
-        [package_name, source.type, source.source, source.justification || "Sin justificaci\xF3n.", true],
-        resolve
-      ));
+    for (const [name, srcs] of Object.entries(sources)) {
+      if (["image", "media", "object", "script", "style", "worker", "font", "connect"].includes(name)) {
+        for (const src of srcs) {
+          await new Promise((resolve) => this.database.run(
+            "INSERT INTO secure_sources (package_name, type, source, justification, active) VALUES (?, ?, ?, ?, ?)",
+            [package_name, name, src.source, src.justification || "Sin justificaci\xF3n.", true],
+            resolve
+          ));
+        }
+      }
     }
-    import_node_fs.default.cpSync(import_node_path.default.join(tempDir, "code"), this.paths.getAppPublic(package_name), { recursive: true });
-    import_node_fs.default.mkdirSync(this.paths.getAppDatabases(package_name), { recursive: true });
+    import_node_fs.default.cpSync(import_node_path.default.join(tempDir, "code"), this.paths.getApp(package_name), { recursive: true });
+    if (useStorage) {
+      import_node_fs.default.mkdirSync(this.paths.getAppGlobalStorage(package_name), { recursive: true });
+    }
+    if (useTemplate) {
+      if (!import_node_fs.default.existsSync(this.paths.appsTemplates)) {
+        import_node_fs.default.mkdirSync(this.paths.appsTemplates, { recursive: true });
+      }
+      import_node_fs.default.writeFileSync(import_node_path.default.join(this.paths.appsTemplates, `${package_name.replace(/\./g, "-")}.liquid`), template, "utf8");
+    }
     import_node_fs.default.rmSync(tempDir, { recursive: true, force: true });
     return true;
   }
@@ -230,8 +259,16 @@ var AppsModel = class {
       [package_name],
       resolve
     ));
+    const appStorage = this.paths.getAppStorage(package_name);
+    if (import_node_fs.default.existsSync(appStorage)) {
+      import_node_fs.default.rmSync(appStorage, { force: true, recursive: true });
+    }
     const appPath = this.paths.getApp(package_name);
     import_node_fs.default.rmSync(appPath, { recursive: true, force: true });
+    const templatePath = import_node_path.default.join(this.paths.appsTemplates, `${package_name.replace(/\./g, "-")}.liquid`);
+    if (import_node_fs.default.existsSync(templatePath)) {
+      import_node_fs.default.rmSync(templatePath, { recursive: true, force: true });
+    }
   }
 };
 __decorateClass([
@@ -322,7 +359,6 @@ __decorateClass([
 // models/fs.ts
 var import_node_fs3 = __toESM(require("node:fs"));
 var import_node_path2 = __toESM(require("node:path"));
-var import_node_child_process = __toESM(require("node:child_process"));
 var FileSystemModel = class {
   resolveFileOrDirectory(result) {
     if (typeof result === "boolean") {
@@ -350,12 +386,12 @@ var FileSystemModel = class {
       isFile: !stat.isDirectory()
     };
   }
-  lsSharedDirectory(path3) {
-    const sharedPath = this.paths.resolveSharedPath({ segments: path3 });
+  lsSharedDirectory(path5) {
+    const sharedPath = this.paths.resolveSharedPath({ segments: path5 });
     return this.resolveFileOrDirectory(sharedPath);
   }
-  lsUserDirectory(name, path3) {
-    const userPath = this.paths.resolveUserPath({ segments: path3, name });
+  lsUserDirectory(name, path5) {
+    const userPath = this.paths.resolveUserPath({ segments: path5, name });
     return this.resolveFileOrDirectory(userPath);
   }
   resolveSharedFile(pathFile) {
@@ -380,28 +416,44 @@ var FileSystemModel = class {
     }
     return result;
   }
-  writeToShared(segments, data) {
+  async writeToShared(segments, data) {
     const filePath = this.paths.resolveSharedPath({ segments, verify: false });
     import_node_fs3.default.writeFileSync(filePath, data, { encoding: "utf-8" });
-    import_node_child_process.default.execSync(`chown :lc ${filePath}`);
+    await this.run({
+      title: "Set Permission To Shared Item",
+      command: "chown",
+      args: [":lc", filePath]
+    });
   }
-  writeToUser(name, segments, data) {
+  async writeToUser(name, segments, data) {
     const filePath = this.paths.resolveUserPath({ name, segments, verify: false });
     import_node_fs3.default.writeFileSync(filePath, data, { encoding: "utf-8" });
-    import_node_child_process.default.execSync(`chown ${name} ${filePath}`);
+    await this.run({
+      title: "Set Owner To User",
+      command: "chown",
+      args: [name, filePath]
+    });
   }
-  mkdirToShared(segments) {
+  async mkdirToShared(segments) {
     const dirPath = this.paths.resolveSharedPath({ segments, verify: false });
     if (!import_node_fs3.default.existsSync(dirPath)) {
       import_node_fs3.default.mkdirSync(dirPath, { recursive: true });
-      import_node_child_process.default.execSync(`chown -R lc ${dirPath}`);
+      await this.run({
+        title: "Set Permission To Shared Dir",
+        command: "chown",
+        args: ["-R", "lc", dirPath]
+      });
     }
   }
-  mkdirToUser(name, segments) {
+  async mkdirToUser(name, segments) {
     const dirPath = this.paths.resolveUserPath({ name, segments, verify: false });
     if (!import_node_fs3.default.existsSync(dirPath)) {
       import_node_fs3.default.mkdirSync(dirPath, { recursive: true });
-      import_node_child_process.default.execSync(`chown ${name} ${dirPath}`);
+      await this.run({
+        title: "Set Permission To User Dir",
+        command: "chown",
+        args: [name, dirPath]
+      });
     }
   }
   rmToShared(segments) {
@@ -427,7 +479,7 @@ var FileSystemModel = class {
     }
     return result;
   }
-  copy(name, origin, dest, move = false) {
+  async copy(name, origin, dest, move = false) {
     const originPath = this.resolvePath(name, origin, true);
     if (typeof originPath === "boolean") {
       return;
@@ -447,26 +499,34 @@ var FileSystemModel = class {
       dp = destPath;
     } else {
       while (import_node_fs3.default.existsSync(destPath)) {
-        destPath += "-copia";
+        destPath += " - copia";
       }
       import_node_fs3.default.cpSync(originPath, destPath, { recursive: true });
       dp = destPath;
     }
     if (dp.split(this.paths.shared).length === 1) {
-      import_node_child_process.default.execSync(`chown ${name} ${dp}`);
+      await this.run({
+        title: "Set Permission To User Dir",
+        command: "chown",
+        args: [name, dp]
+      });
     } else {
-      import_node_child_process.default.execSync(`chown :lc ${dp}`);
+      await this.run({
+        title: "Set Permission To Shared Item",
+        command: "chown",
+        args: [":lc", dp]
+      });
     }
     if (move) {
       import_node_fs3.default.rmSync(originPath, { recursive: true, force: true });
     }
   }
-  rename(uuid, path3, newName) {
-    const oldPath = this.resolvePath(uuid, path3, true);
+  rename(uuid, path5, newName) {
+    const oldPath = this.resolvePath(uuid, path5, true);
     if (typeof oldPath === "boolean") {
       return;
     }
-    const segments = [...path3];
+    const segments = [...path5];
     segments.pop();
     let newPath = this.resolvePath(uuid, [...segments, newName], true);
     if (typeof newPath === "string") {
@@ -479,6 +539,9 @@ var FileSystemModel = class {
 __decorateClass([
   Library("paths")
 ], FileSystemModel.prototype, "paths", 2);
+__decorateClass([
+  Library("process")
+], FileSystemModel.prototype, "run", 2);
 
 // models/shared.ts
 var SharedModel = class {
@@ -571,7 +634,7 @@ __decorateClass([
 var import_node_fs4 = __toESM(require("node:fs"));
 var import_uuid3 = require("uuid");
 var RecycleBinModel = class {
-  async moveToRecycleBin(user, strPath, path3) {
+  async moveToRecycleBin(user, strPath, path5) {
     const id = (0, import_uuid3.v4)();
     const newPath = this.paths.getRecycleBinItem(user.name, id);
     import_node_fs4.default.cpSync(strPath, newPath, { recursive: true });
@@ -584,7 +647,7 @@ var RecycleBinModel = class {
     const minutes = date.getMinutes();
     await new Promise((resolve) => this.database.run(
       "INSERT INTO recycle_bin (id, uid, path, date) VALUES (?, ?, ?, ?)",
-      [id, user.uid, path3.join("|"), `${year.toString()}/${month < 10 ? `0${month.toString()}` : month.toString()}/${day < 10 ? `0${day.toString()}` : day.toString()} ${hours < 10 ? `0${hours.toString()}` : hours.toString()}:${minutes < 10 ? `0${minutes.toString()}` : minutes.toString()}`],
+      [id, user.uid, path5.join("|"), `${year.toString()}/${month < 10 ? `0${month.toString()}` : month.toString()}/${day < 10 ? `0${day.toString()}` : day.toString()} ${hours < 10 ? `0${hours.toString()}` : hours.toString()}:${minutes < 10 ? `0${minutes.toString()}` : minutes.toString()}`],
       resolve
     ));
   }
@@ -618,8 +681,8 @@ var RecycleBinModel = class {
     }
     return result;
   }
-  async restore(name, id, path3) {
-    let newPath = path3;
+  async restore(name, id, path5) {
+    let newPath = path5;
     const oldPath = this.paths.getRecycleBinItem(name, id);
     const stat = import_node_fs4.default.statSync(oldPath);
     const isFile = stat.isFile();
@@ -656,13 +719,13 @@ var RecycleBinModel = class {
     ));
   }
   async delete(user, id) {
-    const path3 = this.paths.getRecycleBinItem(user.name, id);
-    import_node_fs4.default.rmSync(path3, { recursive: true, force: true });
+    const path5 = this.paths.getRecycleBinItem(user.name, id);
+    import_node_fs4.default.rmSync(path5, { recursive: true, force: true });
     await this.deleteFromDB(user.uid, id);
   }
   async clean(user) {
-    const path3 = this.paths.getRecycleBin(user.name);
-    import_node_fs4.default.rmSync(path3, { recursive: true, force: true });
+    const path5 = this.paths.getRecycleBin(user.name);
+    import_node_fs4.default.rmSync(path5, { recursive: true, force: true });
     await this.deleteFromDB(user.uid);
   }
 };
@@ -713,51 +776,88 @@ __decorateClass([
   Library("database")
 ], SourcesModel.prototype, "database", 2);
 
-// models/users.ts
+// models/storages.ts
 var import_node_fs5 = __toESM(require("node:fs"));
-var import_node_child_process2 = __toESM(require("node:child_process"));
+var import_node_path3 = __toESM(require("node:path"));
+var StorageModel = class {
+  resolveTempGlobalItem(item) {
+    const path5 = this.paths.getAppGlobalStorageItem({ packageName: "app-temp", item });
+    return path5;
+  }
+  resolveTempUserItem(item) {
+    const path5 = this.paths.getAppUserStorageItem({ item, packageName: "app-temp", user: "user-temp" });
+    return path5;
+  }
+  resolveGlobalItem(packageName, item) {
+    const path5 = this.paths.getAppGlobalStorageItem({ packageName, item });
+    if (import_node_fs5.default.existsSync(path5)) {
+      return path5;
+    }
+  }
+  resolveUserItem(packageName, name, item) {
+    const path5 = this.paths.getAppUserStorageItem({ packageName, user: name, item });
+    if (import_node_fs5.default.existsSync(path5)) {
+      return path5;
+    }
+  }
+  loadStorage(path5) {
+    if (import_node_fs5.default.existsSync(path5)) {
+      let contentStorage = import_node_fs5.default.readFileSync(path5, "utf8") || "{}";
+      contentStorage = JSON.parse(contentStorage);
+      return contentStorage;
+    }
+    return null;
+  }
+  writeContent(pathStorage, content) {
+    const dirName = import_node_path3.default.dirname(pathStorage);
+    if (!import_node_fs5.default.existsSync(dirName)) {
+      import_node_fs5.default.mkdirSync(dirName, { recursive: true });
+    }
+    let contentStorage = "null";
+    if (content) {
+      contentStorage = JSON.stringify(content);
+    }
+    import_node_fs5.default.writeFileSync(pathStorage, contentStorage, "utf8");
+  }
+};
+__decorateClass([
+  Library("paths")
+], StorageModel.prototype, "paths", 2);
+
+// models/users.ts
+var import_node_fs6 = __toESM(require("node:fs"));
+var import_node_path4 = __toESM(require("node:path"));
 var import_shell_quote = __toESM(require("shell-quote"));
 var import_ini = __toESM(require("ini"));
-var run = ({ title, command, args, proc }) => new Promise((resolve) => {
-  const TITLE = `[${title}]:`;
-  const child_process = import_node_child_process2.default.spawn(command, args);
-  child_process.on("close", resolve);
-  child_process.stdout.on("data", (data) => console.log(TITLE, data.toString("utf8")));
-  child_process.stderr.on("data", (data) => console.error(TITLE, data.toString("utf8")));
-  child_process.on("error", (error) => console.log(TITLE, error.message));
-  if (proc) {
-    proc(child_process.stdin);
-  }
-});
 var UsersModel = class {
   loadConfig(name) {
-    const SMB_CONFIG = import_node_fs5.default.readFileSync(this.paths.samba, "utf8");
+    const SMB_CONFIG = import_node_fs6.default.readFileSync(this.paths.samba, "utf8");
     const smbConfig = import_ini.default.parse(SMB_CONFIG);
     if (name) {
       return smbConfig[name];
     }
     return smbConfig;
   }
-  writeConfig(config) {
+  async writeConfig(config) {
     const smbStrConfig = import_ini.default.stringify(config);
-    import_node_fs5.default.writeFileSync(this.paths.samba, smbStrConfig, "utf8");
-    run({
+    import_node_fs6.default.writeFileSync(this.paths.samba, smbStrConfig, "utf8");
+    await this.run({
       title: "Restart Samba",
       command: "/etc/init.d/smbd",
       args: ["restart"]
     });
   }
-  setConfig(name, config) {
+  async setConfig(name, config) {
     const smbConfig = this.loadConfig();
     smbConfig[name] = {};
     const entries = Object.entries(config);
     for (const [key, value] of entries) {
       smbConfig[name][key] = value;
     }
-    this.writeConfig(smbConfig);
+    await this.writeConfig(smbConfig);
   }
   loadGroup() {
-    const GROUP_CONTENT = import_node_fs5.default.readFileSync(this.paths.groups, "utf8");
+    const GROUP_CONTENT = import_node_fs6.default.readFileSync(this.paths.groups, "utf8");
     const GROUP_LINES = GROUP_CONTENT.split("\n").filter((line) => line !== "");
     const GROUPS = GROUP_LINES.map((line) => line.split(":")).map((line) => ({
       id: Number(line[2]),
@@ -768,7 +868,7 @@ var UsersModel = class {
   }
   loadUserList(filter = false) {
     const { users } = this.loadGroup();
-    const PASSWD_CONTENT = import_node_fs5.default.readFileSync(this.paths.passwd, "utf8");
+    const PASSWD_CONTENT = import_node_fs6.default.readFileSync(this.paths.passwd, "utf8");
     const PASSWD_LINES = PASSWD_CONTENT.split("\n").filter((line) => line !== "");
     const USER_LIST = PASSWD_LINES.map((line) => {
       const user = line.split(":");
@@ -787,7 +887,7 @@ var UsersModel = class {
     return USER_LIST;
   }
   loadHash(name) {
-    const SHADOW_CONTENT = import_node_fs5.default.readFileSync(this.paths.shadow, "utf8");
+    const SHADOW_CONTENT = import_node_fs6.default.readFileSync(this.paths.shadow, "utf8");
     const SHADOW_LINES = SHADOW_CONTENT.split("\n").filter((line) => line !== "");
     const [[_, hash]] = SHADOW_LINES.map((line) => line.split(":")).filter((shadow) => shadow[0] === name);
     return hash;
@@ -796,12 +896,12 @@ var UsersModel = class {
     const { name, password, full_name = "", email = "", phone = "" } = user;
     console.log(`---------------------------- Create User: ${name} ----------------------------`);
     const PASSWORD = this.encrypt.createHash(password);
-    await run({
+    await this.run({
       title: "Create User",
       command: "/usr/sbin/useradd",
       args: ["-p", PASSWORD, "-m", "-G", "lc", "-s", "/bin/bash", "-c", import_shell_quote.default.quote([[full_name, email, phone].join(",")]).replace(/\\/g, ""), name]
     });
-    await run({
+    await this.run({
       title: "Set New User In Samba",
       command: "smbpasswd",
       args: ["-a", name],
@@ -813,7 +913,7 @@ var UsersModel = class {
         stdin.end();
       }
     });
-    this.setConfig(name, {
+    await this.setConfig(name, {
       comment: `Directorio de ${name}`,
       path: `/home/${name}`,
       browsable: "yes",
@@ -845,7 +945,7 @@ var UsersModel = class {
   }
   async updateUser(name, user) {
     const { full_name = "", email = "", phone = "" } = user;
-    await run({
+    await this.run({
       title: `Update User ${name}`,
       command: "/usr/sbin/usermod",
       args: ["-c", import_shell_quote.default.quote([[full_name, email, phone].join(",")]), name]
@@ -854,7 +954,7 @@ var UsersModel = class {
   async updatePassword(name, password) {
     console.log(`----------------------------Update password: ${name}----------------------------`);
     const USER_NAME = import_shell_quote.default.quote([name]);
-    await run({
+    await this.run({
       title: `Update Password To User ${name}`,
       command: "passwd",
       args: [USER_NAME],
@@ -866,12 +966,12 @@ var UsersModel = class {
         stdin.end();
       }
     });
-    await run({
+    await this.run({
       title: `Delete ${name} In Samba`,
       command: "smbpasswd",
       args: ["-x", USER_NAME]
     });
-    await run({
+    await this.run({
       title: `Set User ${name} In Samba`,
       command: "smbpasswd",
       args: ["-a", USER_NAME],
@@ -888,24 +988,31 @@ var UsersModel = class {
   async deleteUser(name) {
     console.log(`---------------------------- Delete User: ${name} ----------------------------`);
     const USER_NAME = import_shell_quote.default.quote([name]);
-    await run({
+    await this.run({
       title: `Delete User ${name} In Samba`,
       command: "smbpasswd",
       args: ["-x", USER_NAME]
     });
-    await run({
+    await this.run({
       title: `Kill proccess Of ${name}`,
       command: "pkill",
       args: ["-u", USER_NAME]
     });
-    await run({
+    await this.run({
       title: `Delete User ${name}`,
       command: "/usr/sbin/userdel",
       args: ["-r", USER_NAME]
     });
     const smbConfig = this.loadConfig();
     delete smbConfig[name];
-    this.writeConfig(smbConfig);
+    await this.writeConfig(smbConfig);
+    const items = import_node_fs6.default.readdirSync(this.paths.storages);
+    for (const item of items) {
+      const userStorage = import_node_path4.default.join(item, name);
+      if (import_node_fs6.default.existsSync(userStorage)) {
+        import_node_fs6.default.rmSync(userStorage, { recursive: true, force: true });
+      }
+    }
     console.log("------------------------------ End Delete User ----------------------------------");
   }
   async assignApp(uid, package_name) {
@@ -932,6 +1039,9 @@ __decorateClass([
 __decorateClass([
   Library("database")
 ], UsersModel.prototype, "database", 2);
+__decorateClass([
+  Library("process")
+], UsersModel.prototype, "run", 2);
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   AppsModel,
@@ -942,6 +1052,7 @@ __decorateClass([
   RecycleBinModel,
   SharedModel,
   SourcesModel,
+  StorageModel,
   UsersModel
 });
 //# sourceMappingURL=models.js.map

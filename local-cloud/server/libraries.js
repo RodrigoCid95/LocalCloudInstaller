@@ -35,7 +35,8 @@ __export(libraries_exports, {
   database: () => database,
   devMode: () => devMode,
   encrypt: () => encrypt,
-  paths: () => paths
+  paths: () => paths,
+  process: () => process
 });
 module.exports = __toCommonJS(libraries_exports);
 
@@ -99,6 +100,7 @@ __export(APIList_exports, {
   RECYCLE_BIN: () => RECYCLE_BIN,
   SHARED: () => SHARED,
   SOURCES: () => SOURCES,
+  STORE: () => STORE,
   USERS: () => USERS
 });
 var APPS = {
@@ -189,6 +191,9 @@ var USERS = {
   DELETE: "DELETE_USER",
   ASSIGN_APP: "ASSIGN_APP_TO_USER",
   UNASSIGN_APP: "UNASSIGN_APP_TO_USER"
+};
+var STORE = {
+  STORAGE: "STORAGE"
 };
 
 // libraries/builder-connector.ts
@@ -290,7 +295,13 @@ var Paths = class {
     return this.config.system.database;
   }
   get apps() {
-    return this.config.system.apps.path;
+    return this.config.system.apps;
+  }
+  get appsTemplates() {
+    return this.config.system.appsTemplates;
+  }
+  get storages() {
+    return this.config.system.storages;
   }
   get users() {
     return this.config.users.path;
@@ -301,17 +312,23 @@ var Paths = class {
   get recycleBin() {
     return this.config.users.recycleBin;
   }
-  getApp(packagename) {
-    return this.config.system.apps.app.path.replace(/:packagename/, packagename);
+  getApp(packageName) {
+    return import_node_path.default.join(this.apps, packageName);
   }
-  getAppPublic(packagename) {
-    return this.config.system.apps.app.public.replace(/:packagename/, packagename);
+  getAppStorage(packageName) {
+    return import_node_path.default.join(this.storages, packageName);
   }
-  getAppDatabases(packagename) {
-    return this.config.system.apps.app.databases.path.replace(/:packagename/, packagename);
+  getAppGlobalStorage(packageName) {
+    return import_node_path.default.join(this.storages, packageName, ".global");
   }
-  getAppDatabase(packagename, name) {
-    return this.config.system.apps.app.databases.database.replace(/:packagename/, packagename).replace(/:name/, name);
+  getAppGlobalStorageItem({ packageName, item }) {
+    return import_node_path.default.join(this.storages, packageName, ".global", `${item}.json`);
+  }
+  getAppUserStorage({ packageName, user }) {
+    return import_node_path.default.join(this.storages, packageName, user);
+  }
+  getAppUserStorageItem({ packageName, user, item }) {
+    return import_node_path.default.join(this.storages, packageName, user, `${item}.json`);
   }
   getUser(name) {
     return import_node_path.default.join(this.config.users.path, name);
@@ -691,7 +708,7 @@ var recycle_bin_default = "CREATE TABLE IF NOT EXISTS recycle_bin (\n  id TEXT P
 var shared_default = "CREATE TABLE IF NOT EXISTS shared (\n  id TEXT PRIMARY KEY,\n  uid INTEGER,\n  path TEXT\n);";
 
 // libraries/database/apps.sql
-var apps_default = "CREATE TABLE IF NOT EXISTS apps (\n    package_name TEXT PRIMARY KEY,\n    title TEXT NOT NULL,\n    description TEXT,\n    author TEXT NOT NULL,\n    extensions TEXT\n);";
+var apps_default = "CREATE TABLE IF NOT EXISTS apps (\n    package_name TEXT PRIMARY KEY,\n    title TEXT NOT NULL,\n    description TEXT,\n    author TEXT NOT NULL,\n    extensions TEXT,\n    use_storage INTEGER,\n    use_template INTEGER\n);";
 
 // libraries/database/users_to_apps.sql
 var users_to_apps_default = "CREATE TABLE IF NOT EXISTS users_to_apps (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    uid INTEGER,\n    package_name REFERENCES apps (package_name) ON DELETE CASCADE ON UPDATE CASCADE\n);";
@@ -716,12 +733,27 @@ var database = async () => {
   await new Promise((resolve) => connector.run(secure_sources_default, resolve));
   return connector;
 };
+
+// libraries/process.ts
+var import_node_child_process2 = __toESM(require("node:child_process"));
+var process = () => ({ title, command, args, proc }) => new Promise((resolve) => {
+  const TITLE = `[${title}]:`;
+  const child_process = import_node_child_process2.default.spawn(command, args);
+  child_process.on("close", resolve);
+  child_process.stdout.on("data", (data) => console.log(TITLE, data.toString("utf8")));
+  child_process.stderr.on("data", (data) => console.error(TITLE, data.toString("utf8")));
+  child_process.on("error", (error) => console.log(TITLE, error.message));
+  if (proc) {
+    proc(child_process.stdin);
+  }
+});
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   builder,
   database,
   devMode,
   encrypt,
-  paths
+  paths,
+  process
 });
 //# sourceMappingURL=libraries.js.map

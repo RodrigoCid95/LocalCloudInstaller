@@ -54,6 +54,7 @@ __export(controllers_exports, {
   SecureSourcesAPIController: () => SecureSourcesAPIController,
   SharedAPIController: () => SharedAPIController,
   SharedController: () => SharedController,
+  StoragesAPIController: () => StoragesAPIController,
   UsersAPIController: () => UsersAPIController,
   verifyApp: () => verifyApp
 });
@@ -231,6 +232,12 @@ function tokens(req, res, next) {
   next();
 }
 
+// controllers/middlewares/csp.ts
+var CSP = (_, res, next) => {
+  res.setHeader("Content-Security-Policy", `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src-elem 'self' 'unsafe-inline';`);
+  next();
+};
+
 // controllers/app.ts
 var import_node_path = __toESM(require("node:path"));
 var verifyApp = (req, res, next) => {
@@ -238,11 +245,60 @@ var verifyApp = (req, res, next) => {
   if (req.session?.apps && req.session?.apps[packagename]) {
     const app = req.session.apps[packagename];
     if (app) {
-      const font = app.secureSources.filter((item) => item.type === "font").join(" ");
-      const img = app.secureSources.filter((item) => item.type === "img").join(" ");
-      const connect = app.secureSources.filter((item) => item.type === "connect").join(" ");
-      const script = app.secureSources.filter((item) => item.type === "script").join(" ");
-      res.setHeader("Content-Security-Policy", `frame-ancestors 'self';font-src 'self'${font ? ` ${font}` : ""};img-src 'self' data:${img ? ` ${img}` : ""};connect-src 'self'${connect ? ` ${connect}` : ""};script-src-elem 'self'${script ? ` ${script}` : ""};`);
+      const directives = {
+        "default-src": ["'self'"],
+        "script-src": ["'self'", "'unsafe-inline'"],
+        "style-src-elem": ["'self'", "'unsafe-inline'"],
+        "img-src": ["'self'", "data:"],
+        "font-src": ["'self'", "data:"]
+      };
+      const setDirective = (directive, value) => {
+        if (!directives[directive]) {
+          directives[directive] = ["'self'"];
+        }
+        if (!directives[directive].includes(value)) {
+          directives[directive].push(value);
+        }
+      };
+      const secureSources = app.secureSources.filter((item) => item.active);
+      for (const item of secureSources) {
+        if (item.type === "image") {
+          setDirective("img-src", item.source);
+          continue;
+        }
+        if (item.type === "media") {
+          setDirective("media-src", item.source);
+          continue;
+        }
+        if (item.type === "object") {
+          setDirective("object-src", item.source);
+          continue;
+        }
+        if (item.type === "script") {
+          setDirective("script-src", item.source);
+          continue;
+        }
+        if (item.type === "style") {
+          setDirective("style-src", item.source);
+          continue;
+        }
+        if (item.type === "worker") {
+          setDirective("worker-src", item.source);
+          continue;
+        }
+        if (item.type === "font") {
+          setDirective("font-src", item.source);
+          continue;
+        }
+        if (item.type === "connect") {
+          setDirective("connect-src", item.source);
+          continue;
+        }
+      }
+      res.setHeader(
+        "Content-Security-Policy",
+        Object.entries(directives).map(([directive, value]) => `${directive} ${value.join(" ")}`).join("; ")
+      );
       next();
     } else {
       res.redirect("/");
@@ -254,10 +310,28 @@ var verifyApp = (req, res, next) => {
 var AppController = class {
   app(req, res) {
     const app = req.session.apps[req.params.packagename];
-    res.render("app", { title: app.title, description: app.description, package_name: req.params.packagename });
+    if (app.useTemplate) {
+      res.render(
+        `apps/${req.params.packagename.replace(/\./g, "-")}`,
+        {
+          title: app.title,
+          description: app.description,
+          package_name: req.params.packagename
+        }
+      );
+    } else {
+      res.render(
+        "app",
+        {
+          title: app.title,
+          description: app.description,
+          package_name: req.params.packagename
+        }
+      );
+    }
   }
   source(req, res) {
-    const appPath = this.appsModel.paths.getAppPublic(req.params.packagename);
+    const appPath = this.appsModel.paths.getApp(req.params.packagename);
     const pathSource = import_node_path.default.join(appPath, ...req.params[0].split("/"));
     res.sendFile(pathSource, (error) => {
       if (error) {
@@ -344,7 +418,7 @@ __decorateClass([
   AfterMiddleware([responseFile])
 ], FileController.prototype, "userFile", 1);
 FileController = __decorateClass([
-  Namespace("/file", { before: [verifySession] })
+  Namespace("/file", { before: [verifySession, CSP] })
 ], FileController);
 
 // controllers/shared.ts
@@ -407,12 +481,12 @@ var LaunchController = class {
     const possibleApps = [];
     for (const package_name of keys) {
       const app = apps[package_name];
-      if (app.extensions.includes(ext) || package_name === queryApp) {
+      if (app?.extensions?.includes(ext) || package_name === queryApp) {
         possibleApps.push(package_name);
       }
     }
     if (possibleApps.length > 0) {
-      res.redirect(`/app/${possibleApps[0]}?file=${req.url}`);
+      res.redirect(`/app/${possibleApps[0]}?open=${req.url}`);
       return;
     }
     res.redirect(`/file${req.url.split("?")[0]}`);
@@ -441,7 +515,7 @@ __decorateClass([
   AfterMiddleware(["responseFile"])
 ], LaunchController.prototype, "userFile", 1);
 LaunchController = __decorateClass([
-  Namespace("/launch", { before: [verifySession] })
+  Namespace("/launch", { before: [verifySession, CSP] })
 ], LaunchController);
 
 // controllers/apis/middlewares/permissions.ts
@@ -960,7 +1034,7 @@ var { GET: GET3, PUT, DELETE } = METHODS;
 var AppsAPIController = class {
   async apps(_, res) {
     const results = await this.appsModel.getApps();
-    res.json(results);
+    res.json(results.map(({ package_name, title, description, author, extensions, useStorage }) => ({ package_name, title, description, author, extensions, useStorage })));
   }
   async appsByUID(req, res) {
     const user = this.usersModel.getUserByUID(Number(req.params.uid || "NaN"));
@@ -972,7 +1046,7 @@ var AppsAPIController = class {
       return;
     }
     const results = await this.appsModel.getAppsByUID(user.uid);
-    res.json(results);
+    res.json(results.map(({ package_name, title, description, author, extensions, useStorage }) => ({ package_name, title, description, author, extensions, useStorage })));
   }
   async install(req, res) {
     const package_zip = req.files?.package_zip;
@@ -1063,7 +1137,8 @@ var AuthAPIController = class {
             ...app,
             secureSources,
             permissions,
-            token: (0, import_uuid2.v4)()
+            token: (0, import_uuid2.v4)(),
+            useTemplate: app.useTemplate
           };
           req.session.apps[app.package_name] = sessionApp;
         }
@@ -1116,7 +1191,27 @@ AuthAPIController = __decorateClass([
 var import_express_fileupload2 = __toESM(require("express-fileupload"));
 var { POST: POST2, PUT: PUT2, DELETE: DELETE3 } = METHODS;
 var FileSystemAPIController = class {
-  sharedDrive(req, res) {
+  filter(req, res) {
+    let items = req.result;
+    if (!req.query.showHidden) {
+      items = items.filter((item) => !/^\./.test(item.name));
+    }
+    if (req.query.ext) {
+      const exts = req.query.ext.split(",");
+      items = items.filter((item) => {
+        let pass = false;
+        for (const ext of exts) {
+          if (item.name.endsWith(`.${ext}`)) {
+            pass = true;
+            break;
+          }
+        }
+        return pass;
+      });
+    }
+    res.json(items);
+  }
+  sharedDrive(req, res, next) {
     const { path: path2 = [] } = req.body;
     const result = this.fsModel.lsSharedDirectory(path2);
     if (typeof result === "boolean") {
@@ -1126,9 +1221,10 @@ var FileSystemAPIController = class {
       });
       return;
     }
-    res.json(result);
+    req.result = result;
+    next();
   }
-  userDrive(req, res) {
+  userDrive(req, res, next) {
     const { path: path2 = [] } = req.body;
     const result = this.fsModel.lsUserDirectory(req.session.user?.name || "", path2);
     if (typeof result === "boolean") {
@@ -1138,19 +1234,20 @@ var FileSystemAPIController = class {
       });
       return;
     }
-    res.json(result);
+    req.result = result;
+    next();
   }
-  mkdirSharedDrive(req, res) {
+  async mkdirSharedDrive(req, res) {
     const { path: path2 = [] } = req.body;
-    this.fsModel.mkdirToShared(path2);
+    await this.fsModel.mkdirToShared(path2);
     res.json(true);
   }
-  mkdirUserDrive(req, res) {
+  async mkdirUserDrive(req, res) {
     const { path: path2 = [] } = req.body;
-    this.fsModel.mkdirToUser(req.session.user?.name || "", path2);
+    await this.fsModel.mkdirToUser(req.session.user?.name || "", path2);
     res.json(true);
   }
-  uploadSharedDrive(req, res) {
+  async uploadSharedDrive(req, res) {
     const { path: path2 = [] } = req.body;
     const { files } = req;
     if (!files) {
@@ -1162,11 +1259,11 @@ var FileSystemAPIController = class {
     }
     const entries = Object.entries(files);
     for (const [name, value] of entries) {
-      this.fsModel.writeToShared([...path2, name], value.data);
+      await this.fsModel.writeToShared([...path2, name], value.data);
     }
     res.json(true);
   }
-  uploadUserDrive(req, res) {
+  async uploadUserDrive(req, res) {
     const { path: path2 = [] } = req.body;
     const { files } = req;
     if (!files) {
@@ -1178,7 +1275,7 @@ var FileSystemAPIController = class {
     }
     const entries = Object.entries(files);
     for (const [name, value] of entries) {
-      this.fsModel.writeToUser(req.session.user?.name || "", [...path2, name], value.data);
+      await this.fsModel.writeToUser(req.session.user?.name || "", [...path2, name], value.data);
     }
     res.json(true);
   }
@@ -1192,7 +1289,7 @@ var FileSystemAPIController = class {
     this.fsModel.rmToUser(req.session.user?.name || "", path2);
     res.json(true);
   }
-  copy(req, res) {
+  async copy(req, res) {
     const { origin, dest } = req.body;
     if ((!origin || !dest) && (!Array.isArray(origin) || !Array.isArray(dest))) {
       res.status(400).json({
@@ -1201,10 +1298,10 @@ var FileSystemAPIController = class {
       });
       return;
     }
-    this.fsModel.copy(req.session.user?.name || "", origin, dest);
+    await this.fsModel.copy(req.session.user?.name || "", origin, dest);
     res.json(true);
   }
-  move(req, res) {
+  async move(req, res) {
     const { origin, dest } = req.body;
     if ((!origin || !dest) && (!Array.isArray(origin) || !Array.isArray(dest))) {
       res.status(400).json({
@@ -1213,7 +1310,7 @@ var FileSystemAPIController = class {
       });
       return;
     }
-    this.fsModel.copy(req.session.user?.name || "", origin, dest, true);
+    await this.fsModel.copy(req.session.user?.name || "", origin, dest, true);
     res.json(true);
   }
   rename(req, res) {
@@ -1237,11 +1334,13 @@ __decorateClass([
 ], FileSystemAPIController.prototype, "fsModel", 2);
 __decorateClass([
   On(POST2, "/shared/list"),
-  BeforeMiddleware([verifyPermission(FS.SHARED_DRIVE)])
+  BeforeMiddleware([verifyPermission(FS.SHARED_DRIVE)]),
+  AfterMiddleware(["filter"])
 ], FileSystemAPIController.prototype, "sharedDrive", 1);
 __decorateClass([
   On(POST2, "/user/list"),
-  BeforeMiddleware([verifyPermission(FS.USER_DRIVE)])
+  BeforeMiddleware([verifyPermission(FS.USER_DRIVE)]),
+  AfterMiddleware(["filter"])
 ], FileSystemAPIController.prototype, "userDrive", 1);
 __decorateClass([
   On(POST2, "/shared"),
@@ -1348,7 +1447,7 @@ var ProfileAPIController = class {
       description: app.description,
       author: app.author
     }));
-    res.json(apps);
+    res.json(apps.map(({ package_name, title, description, author, extensions, useStorage }) => ({ package_name, title, description, author, extensions, useStorage })));
   }
   async update(req, res) {
     if (req.session.user) {
@@ -1611,8 +1710,99 @@ SecureSourcesAPIController = __decorateClass([
   Namespace("api/sources", { before: [verifySession2] })
 ], SecureSourcesAPIController);
 
+// controllers/apis/storages.ts
+var { GET: GET10, PUT: PUT5 } = METHODS;
+function verifyPermission2(req, res, next) {
+  const devModel = this.devModeModel;
+  if (devModel.devMode.config.enable) {
+    next();
+  } else {
+    const origin = getOrigin(req.headers.referer || "");
+    const apps = req.session.apps;
+    if (apps[origin]?.useStorage) {
+      next();
+    } else {
+      res.status(404).end();
+    }
+  }
+}
+var filterPath = (isGlobal) => function(req, _, next) {
+  const devModel = this.devModeModel;
+  const storageModel = this.storageModel;
+  if (devModel.devMode.config.enable) {
+    if (isGlobal) {
+      req.storagePath = storageModel.resolveTempGlobalItem(req.params.name);
+    } else {
+      req.storagePath = storageModel.resolveTempUserItem(req.params.name);
+    }
+  } else {
+    const origin = getOrigin(req.headers.referer || "");
+    if (typeof origin === "string") {
+      if (isGlobal) {
+        req.storagePath = storageModel.resolveGlobalItem(origin, req.params.name);
+      } else {
+        req.storagePath = storageModel.resolveUserItem(origin, req.session.user?.name || "", req.params.name);
+      }
+    }
+  }
+  next();
+};
+var StoragesAPIController = class {
+  globalStore(req, res) {
+    if (typeof req.storagePath === "string") {
+      const contentStorage = this.storageModel.loadStorage(req.storagePath);
+      res.json(contentStorage);
+    } else {
+      res.json(null);
+    }
+  }
+  userStore(req, res) {
+    if (typeof req.storagePath === "string") {
+      const contentStorage = this.storageModel.loadStorage(req.storagePath);
+      res.json(contentStorage);
+    } else {
+      res.json(null);
+    }
+  }
+  setGlobalStore(req, res) {
+    const content = req.body.content || null;
+    this.storageModel.writeContent(req.storagePath, content);
+    res.json(true);
+  }
+  setUserStore(req, res) {
+    const content = req.body.content || null;
+    this.storageModel.writeContent(req.storagePath, content);
+    res.json(true);
+  }
+};
+__decorateClass([
+  Model("DevModeModel")
+], StoragesAPIController.prototype, "devModeModel", 2);
+__decorateClass([
+  Model("StorageModel")
+], StoragesAPIController.prototype, "storageModel", 2);
+__decorateClass([
+  On(GET10, "/:name"),
+  BeforeMiddleware([filterPath(true)])
+], StoragesAPIController.prototype, "globalStore", 1);
+__decorateClass([
+  On(GET10, "/user/:name"),
+  BeforeMiddleware([filterPath(false)])
+], StoragesAPIController.prototype, "userStore", 1);
+__decorateClass([
+  On(PUT5, "/:name"),
+  BeforeMiddleware([filterPath(true)])
+], StoragesAPIController.prototype, "setGlobalStore", 1);
+__decorateClass([
+  On(PUT5, "/user/:name"),
+  BeforeMiddleware([filterPath(false)])
+], StoragesAPIController.prototype, "setUserStore", 1);
+StoragesAPIController = __decorateClass([
+  Namespace("/api/storage", { before: [verifySession2, verifyPermission2] })
+], StoragesAPIController);
+
 // controllers/apis/users.ts
-var { GET: GET10, POST: POST8, PUT: PUT5, DELETE: DELETE8 } = METHODS;
+var { GET: GET11, POST: POST8, PUT: PUT6, DELETE: DELETE8 } = METHODS;
 var UsersAPIController = class {
   index(_, res) {
     const results = this.usersModel.getUsers();
@@ -1720,11 +1910,11 @@ __decorateClass([
   Model("DevModeModel")
 ], UsersAPIController.prototype, "devModeModel", 2);
 __decorateClass([
-  On(GET10, "/"),
+  On(GET11, "/"),
   BeforeMiddleware([verifyPermission(USERS.INDEX)])
 ], UsersAPIController.prototype, "index", 1);
 __decorateClass([
-  On(GET10, "/:uid"),
+  On(GET11, "/:uid"),
   BeforeMiddleware([verifyPermission(USERS.USER)])
 ], UsersAPIController.prototype, "user", 1);
 __decorateClass([
@@ -1732,7 +1922,7 @@ __decorateClass([
   BeforeMiddleware([verifyPermission(USERS.CREATE), decryptRequest])
 ], UsersAPIController.prototype, "create", 1);
 __decorateClass([
-  On(PUT5, "/:uid"),
+  On(PUT6, "/:uid"),
   BeforeMiddleware([verifyPermission(USERS.UPDATE), decryptRequest])
 ], UsersAPIController.prototype, "update", 1);
 __decorateClass([
@@ -1748,7 +1938,7 @@ __decorateClass([
   BeforeMiddleware([verifyPermission(USERS.UNASSIGN_APP), decryptRequest])
 ], UsersAPIController.prototype, "unassignApp", 1);
 UsersAPIController = __decorateClass([
-  Namespace("api/users", { before: [verifySession2] })
+  Namespace("/api/users", { before: [verifySession2] })
 ], UsersAPIController);
 
 // controllers/apis/index.ts
@@ -1766,6 +1956,9 @@ var APIController = class {
       const origin = getOrigin(referer);
       if (typeof origin === "string" && req.session.apps) {
         const apis = req.session.apps[origin].permissions.filter((permission) => permission.active).map((permission) => permission.api);
+        if (req.session.apps[origin].useStorage) {
+          apis.push("STORAGE");
+        }
         res.send(this.builderModel.build({ token, key, apis }));
       } else {
         if (origin === 0) {
@@ -1794,7 +1987,7 @@ APIController = __decorateClass([
 ], APIController);
 
 // controllers/index.ts
-var { GET: GET11 } = METHODS;
+var { GET: GET12 } = METHODS;
 var IndexController = class {
   dashboard(_, res) {
     if (this.devModeModel.devMode.config.enable) {
@@ -1811,12 +2004,12 @@ __decorateClass([
   Model("DevModeModel")
 ], IndexController.prototype, "devModeModel", 2);
 __decorateClass([
-  On(GET11, "/"),
-  BeforeMiddleware([devMode, tokens, verifySession])
+  On(GET12, "/"),
+  BeforeMiddleware([devMode, CSP, tokens, verifySession])
 ], IndexController.prototype, "dashboard", 1);
 __decorateClass([
-  On(GET11, "/login"),
-  BeforeMiddleware([devMode, tokens, verifyNotSession])
+  On(GET12, "/login"),
+  BeforeMiddleware([devMode, CSP, tokens, verifyNotSession])
 ], IndexController.prototype, "login", 1);
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
@@ -1834,6 +2027,7 @@ __decorateClass([
   SecureSourcesAPIController,
   SharedAPIController,
   SharedController,
+  StoragesAPIController,
   UsersAPIController,
   verifyApp
 });
