@@ -13,14 +13,11 @@ rm -R /etc/local-cloud
 rm -R /var/lc/
 
 # Remove Samba
-systemctl stop samba
-systemctl disable samba
-
-# Pregunta al usuario
 read -p "¿Desea eliminar por completo Samba del sistema? (s/S/y/Y para sí): " respuesta
-# Convertir a minúsculas y verificar la respuesta
 respuesta=$(echo "$respuesta" | tr '[:upper:]' '[:lower:]')
 if [[ "$respuesta" == "s" || "$respuesta" == "y" ]]; then
+  systemctl stop samba
+  systemctl disable samba
   sudo systemctl stop smbd
   sudo systemctl stop nmbd
   sudo systemctl disable smbd
@@ -31,10 +28,6 @@ if [[ "$respuesta" == "s" || "$respuesta" == "y" ]]; then
   sudo rm -rf /var/lib/samba
   sudo rm -rf /var/cache/samba
   sudo updatedb
-  if locate samba | grep -q 'samba'; then
-    echo "Algunos archivos de Samba aún están presentes. Revisa manualmente:"
-    locate samba
-  else
-    echo "Samba ha sido completamente eliminado."
-  fi
 fi
+
+echo "LocalCloud se desinstaló por completo, se recomienda reiniciar."
