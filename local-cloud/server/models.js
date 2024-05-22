@@ -146,7 +146,10 @@ var AppsModel = class {
       (error, rows) => error ? resolve(null) : resolve(rows[0])
     ));
   }
-  async install(package_name, data) {
+  async install(package_name, data, update = false) {
+    if (update) {
+      await this.uninstall(package_name, true);
+    }
     const tempDir = import_node_path.default.join(this.paths.apps, "temp", (0, import_uuid.v4)());
     import_node_fs.default.mkdirSync(tempDir, { recursive: true });
     await import_unzipper.default.Open.buffer(data).then((d) => d.extract({ path: tempDir }));
@@ -226,19 +229,29 @@ var AppsModel = class {
       }
     }
     import_node_fs.default.cpSync(import_node_path.default.join(tempDir, "code"), this.paths.getApp(package_name), { recursive: true });
+    const storagePath = this.paths.getAppGlobalStorage(package_name);
     if (useStorage) {
-      import_node_fs.default.mkdirSync(this.paths.getAppGlobalStorage(package_name), { recursive: true });
+      import_node_fs.default.mkdirSync(storagePath, { recursive: true });
+    } else {
+      if (import_node_fs.default.existsSync(storagePath)) {
+        import_node_fs.default.rmSync(storagePath, { recursive: true });
+      }
     }
+    const templatePath = import_node_path.default.join(this.paths.appsTemplates, `${package_name.replace(/\./g, "-")}.liquid`);
     if (useTemplate) {
       if (!import_node_fs.default.existsSync(this.paths.appsTemplates)) {
         import_node_fs.default.mkdirSync(this.paths.appsTemplates, { recursive: true });
       }
-      import_node_fs.default.writeFileSync(import_node_path.default.join(this.paths.appsTemplates, `${package_name.replace(/\./g, "-")}.liquid`), template, "utf8");
+      import_node_fs.default.writeFileSync(templatePath, template, "utf8");
+    } else {
+      if (import_node_fs.default.existsSync(templatePath)) {
+        import_node_fs.default.rmSync(templatePath, { recursive: true });
+      }
     }
     import_node_fs.default.rmSync(tempDir, { recursive: true, force: true });
     return true;
   }
-  async uninstall(package_name) {
+  async uninstall(package_name, skipAssignments = false) {
     await new Promise((resolve) => this.database.run(
       "DELETE FROM secure_sources WHERE package_name = ?",
       [package_name],
@@ -249,19 +262,23 @@ var AppsModel = class {
       [package_name],
       resolve
     ));
-    await new Promise((resolve) => this.database.run(
-      "DELETE FROM users_to_apps WHERE package_name = ?",
-      [package_name],
-      resolve
-    ));
+    if (!skipAssignments) {
+      await new Promise((resolve) => this.database.run(
+        "DELETE FROM users_to_apps WHERE package_name = ?",
+        [package_name],
+        resolve
+      ));
+    }
     await new Promise((resolve) => this.database.run(
       "DELETE FROM apps WHERE package_name = ?",
       [package_name],
       resolve
     ));
-    const appStorage = this.paths.getAppStorage(package_name);
-    if (import_node_fs.default.existsSync(appStorage)) {
-      import_node_fs.default.rmSync(appStorage, { force: true, recursive: true });
+    if (!skipAssignments) {
+      const appStorage = this.paths.getAppStorage(package_name);
+      if (import_node_fs.default.existsSync(appStorage)) {
+        import_node_fs.default.rmSync(appStorage, { force: true, recursive: true });
+      }
     }
     const appPath = this.paths.getApp(package_name);
     import_node_fs.default.rmSync(appPath, { recursive: true, force: true });

@@ -1050,20 +1050,29 @@ var AppsAPIController = class {
   }
   async install(req, res) {
     const package_zip = req.files?.package_zip;
+    const update = req.body.update !== void 0;
     if (package_zip) {
       let package_name = package_zip.name.split(".");
       package_name.pop();
       package_name = package_name.join(".");
-      const result = await this.appsModel.getAppByPackageName(package_name);
-      if (!result) {
-        const result2 = await this.appsModel.install(package_name, package_zip.data);
-        res.json(result2);
-      } else {
+      const { appsModel } = this;
+      const result = await appsModel.getAppByPackageName(package_name);
+      if (update && !result) {
+        res.status(400).json({
+          code: "app-not-exist",
+          message: `La aplicaci\xF3n ${package_name} no est\xE1 instalada.`
+        });
+        return;
+      }
+      if (!update && result) {
         res.status(400).json({
           code: "app-already-exist",
           message: `La aplicaci\xF3n ${package_name} ya est\xE1 instalada.`
         });
+        return;
       }
+      const reslt = await this.appsModel.install(package_name, package_zip.data, update);
+      res.json(reslt);
     } else {
       res.status(400).json({
         code: "fields-required",
