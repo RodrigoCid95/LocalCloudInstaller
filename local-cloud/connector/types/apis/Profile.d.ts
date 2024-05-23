@@ -15,11 +15,18 @@ declare global {
       new_password: string
     }
     type UpdatePasswordMethod = (data: UpdatePasswordMethodArgs) => Promise<UpdatePasswordSuccess | UpdatePasswordFail>
+    interface Config {
+      ionic: {}
+    }
+    type GetConfigMethod = () => Promise<Profile.Config>
+    type SetConfigMethod = (config: Profile.Config) => Promise<void>
     interface Connector {
       info: InfoMethod
       listApps: ListAppsMethod
       update: UpdateMethod
       updatePassword: UpdatePasswordMethod
+      getConfig: GetConfigMethod
+      setConfig: SetConfigMethod
     }
   }
 }

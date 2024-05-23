@@ -1046,6 +1046,16 @@ var UsersModel = class {
       resolve
     ));
   }
+  getUserConfig(name) {
+    const userHomePath = import_node_path4.default.join(this.paths.getUser(name), ".lc");
+    const configContent = import_node_fs6.default.readFileSync(userHomePath, "utf8");
+    return JSON.parse(configContent || "{}");
+  }
+  setUserConfig(name, config) {
+    const userHomePath = import_node_path4.default.join(this.paths.getUser(name), ".lc");
+    const configContent = JSON.stringify(config);
+    import_node_fs6.default.writeFileSync(userHomePath, configContent, "utf8");
+  }
 };
 __decorateClass([
   Library("paths")

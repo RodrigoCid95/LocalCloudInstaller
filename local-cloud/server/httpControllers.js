@@ -310,13 +310,15 @@ var verifyApp = (req, res, next) => {
 var AppController = class {
   app(req, res) {
     const app = req.session.apps[req.params.packagename];
+    const config = this.usersModel.getUserConfig(req.session.user?.name || "");
     if (app.useTemplate) {
       res.render(
         `apps/${req.params.packagename.replace(/\./g, "-")}`,
         {
           title: app.title,
           description: app.description,
-          package_name: req.params.packagename
+          package_name: req.params.packagename,
+          config: config.ionic
         }
       );
     } else {
@@ -325,7 +327,8 @@ var AppController = class {
         {
           title: app.title,
           description: app.description,
-          package_name: req.params.packagename
+          package_name: req.params.packagename,
+          config: config.ionic
         }
       );
     }
@@ -340,6 +343,9 @@ var AppController = class {
     });
   }
 };
+__decorateClass([
+  Model("UsersModel")
+], AppController.prototype, "usersModel", 2);
 __decorateClass([
   Model("DevModeModel")
 ], AppController.prototype, "devModeModel", 2);
@@ -991,6 +997,16 @@ var PROFILE = {
     public: false,
     freeForDashboard: true
   },
+  READ_CONFIG: {
+    name: "PROFILE_READ_CONFIG",
+    public: false,
+    freeForDashboard: true
+  },
+  WRITE_CONFIG: {
+    name: "PROFILE_WRITE_CONFIG",
+    public: false,
+    freeForDashboard: true
+  },
   UPDATE: {
     name: "UPDATE_PROFILE_INFO",
     public: false,
@@ -1458,6 +1474,11 @@ var ProfileAPIController = class {
     }));
     res.json(apps.map(({ package_name, title, description, author, extensions, useStorage }) => ({ package_name, title, description, author, extensions, useStorage })));
   }
+  getConfig(req, res) {
+    const { name } = req.session.user;
+    const config = this.usersModel.getUserConfig(name);
+    res.json(config);
+  }
   async update(req, res) {
     if (req.session.user) {
       const { user_name, full_name, email, phone } = req.body;
@@ -1486,6 +1507,19 @@ var ProfileAPIController = class {
       }
     }
     res.json(true);
+  }
+  async setConfig(req, res) {
+    const { name } = req.session.user;
+    const { config } = req.body;
+    if (config) {
+      this.usersModel.setUserConfig(name, config);
+      res.json(true);
+    } else {
+      res.status(400).json({
+        code: "fields-required",
+        message: "Faltan campos!"
+      });
+    }
   }
   async updatePassword(req, res) {
     const { current_password, new_password } = req.body;
@@ -1522,9 +1556,17 @@ __decorateClass([
   BeforeMiddleware([verifyPermission(PROFILE.APPS)])
 ], ProfileAPIController.prototype, "apps", 1);
 __decorateClass([
+  On(GET6, "/config"),
+  BeforeMiddleware([verifyPermission(PROFILE.READ_CONFIG)])
+], ProfileAPIController.prototype, "getConfig", 1);
+__decorateClass([
   On(POST4, "/"),
   BeforeMiddleware([verifyPermission(PROFILE.UPDATE), decryptRequest])
 ], ProfileAPIController.prototype, "update", 1);
+__decorateClass([
+  On(POST4, "/config"),
+  BeforeMiddleware([verifyPermission(PROFILE.WRITE_CONFIG), decryptRequest])
+], ProfileAPIController.prototype, "setConfig", 1);
 __decorateClass([
   On(PUT3, "/"),
   BeforeMiddleware([verifyPermission(PROFILE.UPDATE_PASSWORD), decryptRequest])
@@ -1998,17 +2040,21 @@ APIController = __decorateClass([
 // controllers/index.ts
 var { GET: GET12 } = METHODS;
 var IndexController = class {
-  dashboard(_, res) {
+  dashboard(req, res) {
     if (this.devModeModel.devMode.config.enable) {
       res.render("dev", { title: "LocalCloud - Dev Mode", description: "LocalCloud - Modo de desarrollo" });
     } else {
-      res.render("dashboard", { title: "LocalCloud - Dashboard", description: "LocalCloud - Dashboard" });
+      const config = this.usersModel.getUserConfig(req.session.user?.name || "");
+      res.render("dashboard", { title: "LocalCloud - Dashboard", description: "LocalCloud - Dashboard", config: config.ionic });
     }
   }
   login(_, res) {
     res.render("login", { title: "LocalCloud - Iniciar sesi\xF3n", description: "LocalCloud - Iniciar sesi\xF3n" });
   }
 };
+__decorateClass([
+  Model("UsersModel")
+], IndexController.prototype, "usersModel", 2);
 __decorateClass([
   Model("DevModeModel")
 ], IndexController.prototype, "devModeModel", 2);

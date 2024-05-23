@@ -155,6 +155,16 @@ var PROFILE = {
     public: false,
     freeForDashboard: true
   },
+  READ_CONFIG: {
+    name: "PROFILE_READ_CONFIG",
+    public: false,
+    freeForDashboard: true
+  },
+  WRITE_CONFIG: {
+    name: "PROFILE_WRITE_CONFIG",
+    public: false,
+    freeForDashboard: true
+  },
   UPDATE: {
     name: "UPDATE_PROFILE_INFO",
     public: false,
