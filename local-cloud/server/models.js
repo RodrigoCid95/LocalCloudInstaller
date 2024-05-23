@@ -1048,8 +1048,11 @@ var UsersModel = class {
   }
   getUserConfig(name) {
     const userHomePath = import_node_path4.default.join(this.paths.getUser(name), ".lc");
-    const configContent = import_node_fs6.default.readFileSync(userHomePath, "utf8");
-    return JSON.parse(configContent || "{}");
+    if (import_node_fs6.default.existsSync(userHomePath)) {
+      const configContent = import_node_fs6.default.readFileSync(userHomePath, "utf8");
+      return JSON.parse(configContent || "{}");
+    }
+    return {};
   }
   setUserConfig(name, config) {
     const userHomePath = import_node_path4.default.join(this.paths.getUser(name), ".lc");
