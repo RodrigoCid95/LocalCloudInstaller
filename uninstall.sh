@@ -18,16 +18,16 @@ respuesta=$(echo "$respuesta" | tr '[:upper:]' '[:lower:]')
 if [[ "$respuesta" == "s" || "$respuesta" == "y" ]]; then
   systemctl stop samba
   systemctl disable samba
-  sudo systemctl stop smbd
-  sudo systemctl stop nmbd
-  sudo systemctl disable smbd
-  sudo systemctl disable nmbd
-  sudo apt-get remove --purge -y samba samba-common samba-common-bin
-  sudo apt-get autoremove -y
-  sudo rm -rf /etc/samba
-  sudo rm -rf /var/lib/samba
-  sudo rm -rf /var/cache/samba
-  sudo updatedb
+  systemctl stop smbd
+  systemctl stop nmbd
+  systemctl disable smbd
+  systemctl disable nmbd
+  apt-get remove --purge -y samba samba-common samba-common-bin
+  apt-get autoremove -y
+  rm -rf /etc/samba
+  rm -rf /var/lib/samba
+  rm -rf /var/cache/samba
+  updatedb
 fi
 
 echo "LocalCloud se desinstaló por completo, se recomienda reiniciar."
