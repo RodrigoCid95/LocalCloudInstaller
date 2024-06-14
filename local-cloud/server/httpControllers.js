@@ -1169,10 +1169,10 @@ var AuthAPIController = class {
         }
         res.json({ ok: true });
       } else {
-        res.status(400).json({ ok: false, message: "La contrase\xF1a es incorrecta!" });
+        res.status(400).json({ ok: false, code: "incorrect-password", message: "La contrase\xF1a es incorrecta!" });
       }
     } else {
-      res.status(400).json({ ok: false, message: `El usuario "${userName}" no existe!` });
+      res.status(400).json({ ok: false, code: "user-not-found", message: `El usuario "${userName}" no existe!` });
     }
   }
   logout(req, res) {
@@ -1221,17 +1221,27 @@ var FileSystemAPIController = class {
     if (!req.query.showHidden) {
       items = items.filter((item) => !/^\./.test(item.name));
     }
-    if (req.query.ext) {
+    let containsFiles = true;
+    if (req.query.onlyDirs) {
+      containsFiles = false;
+      items = items.filter((item) => !item.isFile);
+    }
+    if (req.query.onlyFiles) {
+      items = items.filter((item) => item.isFile);
+    }
+    if (containsFiles && req.query.ext) {
       const exts = req.query.ext.split(",");
       items = items.filter((item) => {
         let pass = false;
-        for (const ext of exts) {
-          if (item.name.endsWith(`.${ext}`)) {
-            pass = true;
-            break;
+        if (item.isFile) {
+          for (const ext of exts) {
+            if (item.name.endsWith(`.${ext}`)) {
+              pass = true;
+              break;
+            }
           }
         }
-        return pass;
+        return pass || req.query.includeDirs && !item.isFile;
       });
     }
     res.json(items);
@@ -1273,7 +1283,8 @@ var FileSystemAPIController = class {
     res.json(true);
   }
   async uploadSharedDrive(req, res) {
-    const { path: path2 = [] } = req.body;
+    let { path: path2 = "" } = req.body;
+    path2 = path2.split("|");
     const { files } = req;
     if (!files) {
       res.status(400).json({
@@ -1289,7 +1300,8 @@ var FileSystemAPIController = class {
     res.json(true);
   }
   async uploadUserDrive(req, res) {
-    const { path: path2 = [] } = req.body;
+    let { path: path2 = "" } = req.body;
+    path2 = path2.split("|");
     const { files } = req;
     if (!files) {
       res.status(400).json({
@@ -2040,16 +2052,15 @@ APIController = __decorateClass([
 // controllers/index.ts
 var { GET: GET12 } = METHODS;
 var IndexController = class {
-  dashboard(req, res) {
+  dashboard(_, res) {
     if (this.devModeModel.devMode.config.enable) {
-      res.render("dev", { title: "LocalCloud - Dev Mode", description: "LocalCloud - Modo de desarrollo" });
+      res.render("index", { title: "LocalCloud - Dev Mode", description: "LocalCloud - Modo de desarrollo", devMode: true });
     } else {
-      const config = this.usersModel.getUserConfig(req.session.user?.name || "");
-      res.render("dashboard", { title: "LocalCloud - Dashboard", description: "LocalCloud - Dashboard", config: config.ionic });
+      res.render("index", { title: "LocalCloud - Dashboard", description: "LocalCloud - Dashboard" });
     }
   }
   login(_, res) {
-    res.render("login", { title: "LocalCloud - Iniciar sesi\xF3n", description: "LocalCloud - Iniciar sesi\xF3n" });
+    res.render("index", { title: "LocalCloud - Iniciar sesi\xF3n", description: "LocalCloud - Iniciar sesi\xF3n" });
   }
 };
 __decorateClass([
