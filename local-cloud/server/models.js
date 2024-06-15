@@ -844,7 +844,6 @@ __decorateClass([
 // models/users.ts
 var import_node_fs6 = __toESM(require("node:fs"));
 var import_node_path4 = __toESM(require("node:path"));
-var import_shell_quote = __toESM(require("shell-quote"));
 var import_ini = __toESM(require("ini"));
 var UsersModel = class {
   loadConfig(name) {
@@ -916,7 +915,7 @@ var UsersModel = class {
     await this.run({
       title: "Create User",
       command: "/usr/sbin/useradd",
-      args: ["-p", PASSWORD, "-m", "-G", "lc", "-s", "/bin/bash", "-c", import_shell_quote.default.quote([[full_name, email, phone].join(",")]).replace(/\\/g, ""), name]
+      args: ["-p", PASSWORD, "-m", "-G", "lc", "-s", "/bin/bash", "-c", [full_name, email, phone].join(","), name]
     });
     await this.run({
       title: "Set New User In Samba",
@@ -965,16 +964,15 @@ var UsersModel = class {
     await this.run({
       title: `Update User ${name}`,
       command: "/usr/sbin/usermod",
-      args: ["-c", import_shell_quote.default.quote([[full_name, email, phone].join(",")]), name]
+      args: ["-c", [full_name, email, phone].join(","), name]
     });
   }
   async updatePassword(name, password) {
     console.log(`----------------------------Update password: ${name}----------------------------`);
-    const USER_NAME = import_shell_quote.default.quote([name]);
     await this.run({
       title: `Update Password To User ${name}`,
       command: "passwd",
-      args: [USER_NAME],
+      args: [name],
       proc(stdin) {
         stdin.write(`${password}
 `);
@@ -986,12 +984,12 @@ var UsersModel = class {
     await this.run({
       title: `Delete ${name} In Samba`,
       command: "smbpasswd",
-      args: ["-x", USER_NAME]
+      args: ["-x", name]
     });
     await this.run({
       title: `Set User ${name} In Samba`,
       command: "smbpasswd",
-      args: ["-a", USER_NAME],
+      args: ["-a", name],
       proc(stdin) {
         stdin.write(`${password}
 `);
@@ -1004,21 +1002,20 @@ var UsersModel = class {
   }
   async deleteUser(name) {
     console.log(`---------------------------- Delete User: ${name} ----------------------------`);
-    const USER_NAME = import_shell_quote.default.quote([name]);
     await this.run({
       title: `Delete User ${name} In Samba`,
       command: "smbpasswd",
-      args: ["-x", USER_NAME]
+      args: ["-x", name]
     });
     await this.run({
       title: `Kill proccess Of ${name}`,
       command: "pkill",
-      args: ["-u", USER_NAME]
+      args: ["-u", name]
     });
     await this.run({
       title: `Delete User ${name}`,
       command: "/usr/sbin/userdel",
-      args: ["-r", USER_NAME]
+      args: ["-r", name]
     });
     const smbConfig = this.loadConfig();
     delete smbConfig[name];
