@@ -60,3 +60,6 @@ fi
 chmod +x ./install
 ./install
 systemctl start local-cloud
+IP=$(hostname -I)
+IP=$(echo "$IP" | tr -d '[[:space:]]')
+echo "Puedes iniciar sesión desde http://$IP:3001"
