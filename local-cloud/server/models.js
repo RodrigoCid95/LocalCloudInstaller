@@ -325,7 +325,7 @@ var DevModeModel = class {
     const PASSWD_CONTENT = import_node_fs2.default.readFileSync(this.paths.passwd, "utf8");
     const PASSWD_LINES = PASSWD_CONTENT.split("\n").filter((line) => line !== "");
     const USER_LIST = PASSWD_LINES.map((line) => line.split(":"));
-    const result = USER_LIST.find((us) => us[0] === this.devMode.config.user);
+    const result = USER_LIST.find((us) => us[0] === this.devMode.user);
     if (result) {
       const name = result[0];
       const [full_name = "", email = "", phone = ""] = result[4].split(",");
@@ -340,14 +340,15 @@ var DevModeModel = class {
   }
   async getApps(uid) {
     const apps = await new Promise((resolve) => this.database.all(
-      "SELECT apps.package_name, apps.title, apps.description, apps.author FROM users_to_apps INNER JOIN apps ON users_to_apps.package_name = apps.package_name WHERE users_to_apps.uid = ?;",
+      "SELECT apps.package_name, apps.title, apps.description, apps.author, apps.use_template FROM users_to_apps INNER JOIN apps ON users_to_apps.package_name = apps.package_name WHERE users_to_apps.uid = ?;",
       [uid || ""],
       (error, rows) => error ? resolve([]) : resolve(rows.map((result) => ({
         package_name: result.package_name,
         title: result.title,
         description: result.description,
         author: result.author,
-        extensions: (result.extensions || "").split("|")
+        extensions: (result.extensions || "").split("|"),
+        useTemplate: result.use_template === 1
       })))
     ));
     const appList = {};

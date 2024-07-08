@@ -164,7 +164,7 @@ var METHODS = {
 function verifyDevMode() {
   const _this = this;
   const devModeModel = _this?.devModeModel;
-  if (devModeModel?.devMode.config.enable) {
+  if (devModeModel?.devMode.enable) {
     return devModeModel;
   }
   return false;
@@ -310,25 +310,22 @@ var verifyApp = (req, res, next) => {
 var AppController = class {
   app(req, res) {
     const app = req.session.apps[req.params.packagename];
-    const config = this.usersModel.getUserConfig(req.session.user?.name || "");
     if (app.useTemplate) {
       res.render(
         `apps/${req.params.packagename.replace(/\./g, "-")}`,
         {
           title: app.title,
           description: app.description,
-          package_name: req.params.packagename,
-          config: config.ionic
+          package_name: req.params.packagename
         }
       );
     } else {
       res.render(
-        "app",
+        "os/app",
         {
           title: app.title,
           description: app.description,
-          package_name: req.params.packagename,
-          config: config.ionic
+          package_name: req.params.packagename
         }
       );
     }
@@ -1139,7 +1136,7 @@ var import_uuid2 = require("uuid");
 var { GET: GET4, POST, DELETE: DELETE2 } = METHODS;
 var AuthAPIController = class {
   async index(req, res) {
-    if (req.session.user || this.devModeModel.devMode.config.enable) {
+    if (req.session.user || this.devModeModel.devMode.enable) {
       res.json(true);
     } else {
       res.json(false);
@@ -1732,7 +1729,10 @@ var SecureSourcesAPIController = class {
       query["package_name"] = package_name.toString();
     }
     if (type) {
-      query["type"] = type.toString();
+      const t = type.toString();
+      if (["image", "media", "object", "script", "style", "worker", "font", "connect"].includes(t)) {
+        query["type"] = t;
+      }
     }
     if (active !== void 0) {
       query["active"] = active === "true";
@@ -1777,7 +1777,7 @@ SecureSourcesAPIController = __decorateClass([
 var { GET: GET10, PUT: PUT5 } = METHODS;
 function verifyPermission2(req, res, next) {
   const devModel = this.devModeModel;
-  if (devModel.devMode.config.enable) {
+  if (devModel.devMode.enable) {
     next();
   } else {
     const origin = getOrigin(req.headers.referer || "");
@@ -1792,7 +1792,7 @@ function verifyPermission2(req, res, next) {
 var filterPath = (isGlobal) => function(req, _, next) {
   const devModel = this.devModeModel;
   const storageModel = this.storageModel;
-  if (devModel.devMode.config.enable) {
+  if (devModel.devMode.enable) {
     if (isGlobal) {
       req.storagePath = storageModel.resolveTempGlobalItem(req.params.name);
     } else {
@@ -2008,7 +2008,7 @@ UsersAPIController = __decorateClass([
 var APIController = class {
   connector(req, res) {
     res.set("Content-Type", "text/javascript");
-    if (this.devModeModel.devMode.config.enable) {
+    if (this.devModeModel.devMode.enable) {
       res.send(this.builderModel.build());
       return;
     }
@@ -2053,14 +2053,14 @@ APIController = __decorateClass([
 var { GET: GET12 } = METHODS;
 var IndexController = class {
   dashboard(_, res) {
-    if (this.devModeModel.devMode.config.enable) {
-      res.render("index", { title: "LocalCloud - Dev Mode", description: "LocalCloud - Modo de desarrollo", devMode: true });
+    if (this.devModeModel.devMode.enable) {
+      res.render("os/index", { title: "LocalCloud - Dev Mode", description: "LocalCloud - Modo de desarrollo", devMode: true });
     } else {
-      res.render("index", { title: "LocalCloud - Dashboard", description: "LocalCloud - Dashboard" });
+      res.render("os/index", { title: "LocalCloud - Dashboard", description: "LocalCloud - Dashboard" });
     }
   }
   login(_, res) {
-    res.render("index", { title: "LocalCloud - Iniciar sesi\xF3n", description: "LocalCloud - Iniciar sesi\xF3n" });
+    res.render("os/index", { title: "LocalCloud - Iniciar sesi\xF3n", description: "LocalCloud - Iniciar sesi\xF3n" });
   }
 };
 __decorateClass([

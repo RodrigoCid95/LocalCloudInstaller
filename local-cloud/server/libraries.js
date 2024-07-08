@@ -36,7 +36,7 @@ __export(libraries_exports, {
   devMode: () => devMode,
   encrypt: () => encrypt,
   paths: () => paths,
-  process: () => process
+  process: () => process2
 });
 module.exports = __toCommonJS(libraries_exports);
 
@@ -270,16 +270,28 @@ var Builder = class {
 var builder = () => new Builder();
 
 // libraries/dev-mode.ts
+var import_node_fs = __toESM(require("node:fs"));
 var DevMode = class {
-  get config() {
-    return configs.get("devMode");
+  #enable;
+  get enable() {
+    return this.#enable;
+  }
+  get user() {
+    return configs.get("devMode")?.user || process.env.USER || "";
+  }
+  constructor() {
+    if (isRelease) {
+      this.#enable = configs.get("devMode")?.enable || !import_node_fs.default.existsSync(configs.get("paths").system.path);
+    } else {
+      this.#enable = true;
+    }
   }
 };
 var devMode = () => new DevMode();
 
 // libraries/paths.ts
 var import_node_child_process = require("node:child_process");
-var import_node_fs = __toESM(require("node:fs"));
+var import_node_fs2 = __toESM(require("node:fs"));
 var import_node_path = __toESM(require("node:path"));
 var import_ini = __toESM(require("ini"));
 var Paths = class {
@@ -308,7 +320,7 @@ var Paths = class {
     return this.config.system.apps;
   }
   get appsTemplates() {
-    return this.config.system.appsTemplates;
+    return this.config.system.appsViews;
   }
   get storages() {
     return this.config.system.storages;
@@ -353,7 +365,7 @@ var Paths = class {
     const pathSegments = segments.filter((segment) => segment !== "..");
     const pathShared = import_node_path.default.join(...pathSegments);
     if (verify) {
-      if (import_node_fs.default.existsSync(pathShared)) {
+      if (import_node_fs2.default.existsSync(pathShared)) {
         return pathShared;
       }
       return false;
@@ -369,13 +381,13 @@ var Paths = class {
 };
 var paths = async () => {
   const paths2 = new Paths(configs.get("paths"));
-  if (!import_node_fs.default.existsSync(paths2.system)) {
-    import_node_fs.default.mkdirSync(paths2.system);
+  if (!import_node_fs2.default.existsSync(paths2.system)) {
+    import_node_fs2.default.mkdirSync(paths2.system);
   }
-  if (!import_node_fs.default.existsSync(paths2.apps)) {
-    import_node_fs.default.mkdirSync(paths2.apps);
+  if (!import_node_fs2.default.existsSync(paths2.apps)) {
+    import_node_fs2.default.mkdirSync(paths2.apps);
   }
-  const SMB_CONFIG = import_node_fs.default.readFileSync(paths2.samba, "utf8");
+  const SMB_CONFIG = import_node_fs2.default.readFileSync(paths2.samba, "utf8");
   const smbConfig = import_ini.default.parse(SMB_CONFIG);
   if (!smbConfig["Carpeta Compartida"]) {
     smbConfig["Carpeta Compartida"] = {
@@ -387,7 +399,7 @@ var paths = async () => {
       "valid users": "@lc"
     };
     const smbStrConfig = import_ini.default.stringify(smbConfig);
-    import_node_fs.default.writeFileSync(paths2.samba, smbStrConfig, "utf8");
+    import_node_fs2.default.writeFileSync(paths2.samba, smbStrConfig, "utf8");
     await new Promise((resolve) => {
       const child_process = (0, import_node_child_process.spawn)("/etc/init.d/smbd", ["restart"]);
       child_process.on("close", resolve);
@@ -746,7 +758,7 @@ var database = async () => {
 
 // libraries/process.ts
 var import_node_child_process2 = __toESM(require("node:child_process"));
-var process = () => ({ title, command, args, proc }) => new Promise((resolve) => {
+var process2 = () => ({ title, command, args, proc }) => new Promise((resolve) => {
   const TITLE = `[${title}]:`;
   const child_process = import_node_child_process2.default.spawn(command, args);
   child_process.on("close", resolve);
