@@ -1,5 +1,5 @@
 [Unit]
-Description=Servidor Node.js
+Description=LocalCloud Server
 After=network.target
 
 [Service]

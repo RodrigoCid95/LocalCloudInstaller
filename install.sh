@@ -8,7 +8,8 @@ fi
 if systemctl list-units --type=service --all | grep -q "local-cloud"; then
     echo "LocalCloud ya está instalando."
     if [ -x ./update.sh ]; then
-        ./update.sh
+        chmod +x update
+        ./update
         exit 0
     else
         echo "El archivo update.sh no existe o no es ejecutable" >&2
@@ -51,40 +52,11 @@ cp ./local-cloud.service /etc/systemd/system
 mkdir /var/log/local-cloud
 systemctl daemon-reload
 systemctl enable local-cloud
-systemctl start local-cloud
 
 if ! grep -q "^lc:" /etc/group; then
     groupadd lc
 fi
 
-uid=0
-while true; do
-    read -p "Ingresa un nombre de usuario: " user_name
-    result=$(getent passwd | awk -F: '{ print $1}' | grep -w "$user_name")
-    if [ -n "$result" ]; then
-        echo "El usuario $user_name ya existe. Intenta con otro nombre de usuario."
-    else
-        read -p "Ingresa una contraseña: " -s password
-        curl -X POST -H "Content-Type: application/json" -d "{\"email\": \"\",\"full_name\": \"\",\"phone\": \"\",\"name\": \"$user_name\",\"password\": \"$password\"}" -s http://localhost:3001/api/users
-        uid=$(id -u "$user_name")
-        break
-    fi
-done
-
-apps_directory="./apps"
-apps=()
-for file in "$apps_directory"/*; do
-    if [ -f "$file" ]; then
-        echo "Instalando $file ..."
-        curl -X PUT -F "package_zip=@$file" -s http://localhost:3001/api/apps
-        echo "¡$file instalada!"
-        name_app=$(basename "${file%.*}")
-        apps+=("$name_app")
-    fi
-done
-for name_app in "${apps[@]}"; do
-    curl -X POST -H "Content-Type: application/json" -d "{\"uid\":\"$uid\", \"package_name\":\"$name_app\"}" -s http://localhost:3001/api/users/assign-app
-done
-
-systemctl stop local-cloud
+chmod +x ./install
+./install
 systemctl start local-cloud

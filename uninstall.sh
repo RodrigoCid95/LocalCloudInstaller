@@ -10,7 +10,6 @@ systemctl stop local-cloud
 systemctl disable local-cloud
 rm /etc/systemd/system/local-cloud.service
 rm -R /etc/local-cloud
-rm -R /var/lc/
 
 # Remove Samba
 read -p "¿Desea eliminar por completo Samba del sistema? (s/S/y/Y para sí): " respuesta
