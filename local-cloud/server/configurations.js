@@ -84,15 +84,17 @@ var builderConnector = {
 };
 
 // config/http.ts
+var import_node_crypto = __toESM(require("node:crypto"));
 var import_express_session = __toESM(require("express-session"));
+var import_connect_redis = __toESM(require("connect-redis"));
+var import_redis = require("redis");
 var import_compression = __toESM(require("compression"));
 var import_liquidjs = require("liquidjs");
-var import_uuid = require("uuid");
 var import_cors = __toESM(require("cors"));
 
 // config/paths.ts
 var import_node_path2 = __toESM(require("node:path"));
-var system = import_node_path2.default.resolve(".", "lc");
+var system = import_node_path2.default.resolve(process.cwd(), "lc");
 var paths = {
   samba: "/etc/samba/smb.conf",
   shadow: "/etc/shadow",
@@ -115,12 +117,15 @@ var paths = {
 };
 
 // config/http.ts
+var redisClient = (0, import_redis.createClient)();
 var middlewares = [
   (0, import_compression.default)(),
   (0, import_express_session.default)({
-    saveUninitialized: false,
+    store: new import_connect_redis.default({ client: redisClient }),
+    secret: import_node_crypto.default.randomUUID(),
     resave: false,
-    secret: (0, import_uuid.v4)()
+    saveUninitialized: false,
+    cookie: { secure: false }
   })
 ];
 if (!isRelease || flags.get("maintenance-mode")) {
@@ -139,7 +144,7 @@ var HTTP = {
   },
   middlewares,
   events: {
-    onError(err, req, res, next) {
+    onError(err, _, res, next) {
       if (err) {
         res.status(500).json(err);
       } else {

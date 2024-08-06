@@ -3,7 +3,7 @@ Description=LocalCloud Server
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/node /etc/local-cloud/server/main.js -- --type http
+ExecStart=/usr/bin/node /etc/local-cloud/server/main.js -- --type http --multi-thread
 Restart=always
 User=root
 Environment=PATH=/usr/bin:/usr/local/bin

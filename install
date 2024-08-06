@@ -112,4 +112,76 @@
   }
   serverProcess.on('exit', () => process.exit(1))
   serverProcess.kill()
+  const CERTIFICATE_PATH = '/etc/nginx/ssl_certificate'
+  require('node:fs').mkdirSync(CERTIFICATE_PATH)
+  const run = ({ command, args, proc }) => new Promise(resolve => {
+    const child_process = spawn(command, args, { cwd: CERTIFICATE_PATH })
+    child_process.on('close', resolve)
+    child_process.stdout.on('data', (data) => console.log(data.toString('utf-8')))
+    child_process.stderr.on('data', (data) => console.error(data.toString('utf-8')))
+    child_process.on('error', (error) => console.log(error.message))
+    if (proc) {
+      proc(child_process.stdin)
+    }
+  })
+  await run({
+    command: 'openssl',
+    args: ['genrsa', '-out', 'key.pem']
+  })
+  await run({
+    command: 'openssl',
+    args: ['req', '-new', '-key', 'key.pem', '-out', 'csr.pem'],
+    proc(stdin) {
+      stdin.write('MX\n')
+      stdin.write('Puebla\n')
+      stdin.write('Chapulco\n')
+      stdin.write('Local Cloud\n')
+      stdin.write('Software development\n')
+      stdin.write('Local Cloud\n')
+      stdin.write('rodrigocid95@gmail.com\n')
+      stdin.write('\n')
+      stdin.write('\n')
+      stdin.end()
+    }
+  })
+  await run({
+    command: 'openssl',
+    args: ['x509', '-req', '-days', '9999', '-in', 'csr.pem', '-signkey', 'key.pem', '-out', 'cert.pem']
+  })
+  const PORTS = Array
+    .from({ length: require('node:os').availableParallelism() }, (_, i) => 3000 + i)
+    .map(p => `    server 127.0.0.1:${p};`)
+  const NGINX_CONFIGURATION = `server {
+    listen 80;
+    server_name localcloud.local;
+
+    return 301 https://$host$request_uri;
+}
+upstream local_cloud_app {
+    ip_hash;
+${PORTS.join('\n')}
+}
+server {
+    listen 443 ssl;
+
+    server_name localcloud.local;
+
+    ssl_certificate /etc/nginx/ssl_certificate/cert.pem;
+    ssl_certificate_key /etc/nginx/ssl_certificate/key.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    client_max_body_size 1024M;
+
+    location / {
+        proxy_pass http://local_cloud_app;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}`
+  console.log(NGINX_CONFIGURATION)
+  require('node:fs').writeFileSync('/etc/nginx/sites-available/default', NGINX_CONFIGURATION, 'utf-8')
 })()

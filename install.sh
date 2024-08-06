@@ -31,6 +31,18 @@ else
     apt-get install -y nodejs
 fi
 
+if ! command -v nginx >/dev/null 2>&1; then
+    echo "instalando Nginx ..."
+    sudo apt update
+    sudo apt install -y nginx
+    if [ $? -eq 0 ]; then
+        echo "nginx se ha instalado correctamente."
+    else
+        echo "Hubo un problema al instalar nginx."
+        exit 1
+    fi
+fi
+
 if ! dpkg -l | grep -qw samba; then
     echo "Instalando Samba ..."
     apt-get update
@@ -60,6 +72,8 @@ fi
 chmod +x ./install
 ./install
 systemctl start local-cloud
+systemctl enable nginx
+systemctl start nginx
 IP=$(hostname -I)
 IP=$(echo "$IP" | tr -d '[[:space:]]')
-echo "Puedes iniciar sesión desde http://$IP:3001"
+echo "Puedes iniciar sesión desde https://$IP"

@@ -11,6 +11,12 @@ systemctl disable local-cloud
 rm /etc/systemd/system/local-cloud.service
 rm -R /etc/local-cloud
 
+# Remove Nginx
+systemctl stop nginx
+systemctl disable nginx
+apt purge nginx -y
+apt autoremove -y
+
 # Remove Samba
 read -p "¿Desea eliminar por completo Samba del sistema? (s/S/y/Y para sí): " respuesta
 respuesta=$(echo "$respuesta" | tr '[:upper:]' '[:lower:]')
@@ -21,8 +27,8 @@ if [[ "$respuesta" == "s" || "$respuesta" == "y" ]]; then
   systemctl stop nmbd
   systemctl disable smbd
   systemctl disable nmbd
-  apt-get remove --purge -y samba samba-common samba-common-bin
-  apt-get autoremove -y
+  apt remove --purge -y samba samba-common samba-common-bin
+  apt autoremove -y
   rm -rf /etc/samba
   rm -rf /var/lib/samba
   rm -rf /var/cache/samba
