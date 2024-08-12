@@ -35,6 +35,7 @@ __export(config_exports, {
   builderConnector: () => builderConnector,
   database: () => database,
   devMode: () => devMode,
+  keys: () => keys,
   paths: () => paths
 });
 module.exports = __toCommonJS(config_exports);
@@ -84,10 +85,6 @@ var builderConnector = {
 };
 
 // config/http.ts
-var import_node_crypto = __toESM(require("node:crypto"));
-var import_express_session = __toESM(require("express-session"));
-var import_connect_redis = __toESM(require("connect-redis"));
-var import_redis = require("redis");
 var import_compression = __toESM(require("compression"));
 var import_liquidjs = require("liquidjs");
 var import_cors = __toESM(require("cors"));
@@ -117,15 +114,44 @@ var paths = {
 };
 
 // config/http.ts
-var redisClient = (0, import_redis.createClient)();
+var import_express_session = __toESM(require("express-session"));
+var import_connect_mongo = __toESM(require("connect-mongo"));
+
+// config/keys.ts
+var import_node_path3 = __toESM(require("node:path"));
+var import_node_fs = __toESM(require("node:fs"));
+var import_node_crypto = __toESM(require("node:crypto"));
+var KEY_PATH = import_node_path3.default.join(process.cwd(), "key.pem");
+if (!import_node_fs.default.existsSync(KEY_PATH)) {
+  const secret2 = import_node_crypto.default.generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: {
+      type: "spki",
+      format: "pem"
+    },
+    privateKeyEncoding: {
+      type: "pkcs8",
+      format: "pem"
+    }
+  }).privateKey;
+  import_node_fs.default.writeFileSync(KEY_PATH, secret2, "utf-8");
+}
+var secret = import_node_fs.default.readFileSync(KEY_PATH, "utf-8") || "";
+var PASSWD_PASS = import_node_path3.default.join(process.cwd(), "mongod");
+var password = (import_node_fs.default.readFileSync(PASSWD_PASS, "utf-8") || "").slice(0, -1);
+var keys = { password, secret };
+
+// config/http.ts
 var middlewares = [
   (0, import_compression.default)(),
   (0, import_express_session.default)({
-    store: new import_connect_redis.default({ client: redisClient }),
-    secret: import_node_crypto.default.randomUUID(),
+    store: import_connect_mongo.default.create({
+      mongoUrl: `mongodb://lc:${keys.password}@localhost:27017`,
+      dbName: "_lc"
+    }),
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false }
+    secret: keys.secret
   })
 ];
 if (!isRelease || flags.get("maintenance-mode")) {
@@ -144,6 +170,9 @@ var HTTP = {
   },
   middlewares,
   events: {
+    afterConfig(app) {
+      app.set("trust proxy", 1);
+    },
     onError(err, _, res, next) {
       if (err) {
         res.status(500).json(err);
@@ -176,6 +205,7 @@ var devMode = {
   builderConnector,
   database,
   devMode,
+  keys,
   paths
 });
 //# sourceMappingURL=configurations.js.map

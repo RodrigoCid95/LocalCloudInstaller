@@ -146,8 +146,7 @@ ${Object.keys(interfaces).join(", ")}`);
 
 // main.ts
 var import_node_cluster = __toESM(require("node:cluster"));
-var multiThread = flags.get("multi-thread");
-if (multiThread && import_node_cluster.default.isPrimary) {
+if (import_node_cluster.default.isPrimary) {
   const os = require("node:os");
   const numCPUs = os.availableParallelism();
   console.log(`

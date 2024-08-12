@@ -32,9 +32,9 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var libraries_exports = {};
 __export(libraries_exports, {
   builder: () => builder,
-  database: () => database,
   devMode: () => devMode,
   encrypt: () => encrypt,
+  mongo: () => mongo,
   paths: () => paths,
   process: () => process2
 });
@@ -720,40 +720,20 @@ var Encrypt = class {
 // libraries/encryptor.ts
 var encrypt = () => new Encrypt();
 
-// libraries/database/index.ts
-var import_sqlite3 = require("sqlite3");
-
-// libraries/database/recycle_bin.sql
-var recycle_bin_default = "CREATE TABLE IF NOT EXISTS recycle_bin (\n  id TEXT PRIMARY KEY,\n  uid INTEGER,\n  path TEXT NOT NULL,\n  date TEXT NOT NULL\n);";
-
-// libraries/database/shared.sql
-var shared_default = "CREATE TABLE IF NOT EXISTS shared (\n  id TEXT PRIMARY KEY,\n  uid INTEGER,\n  path TEXT\n);";
-
-// libraries/database/apps.sql
-var apps_default = "CREATE TABLE IF NOT EXISTS apps (\n    package_name TEXT PRIMARY KEY,\n    title TEXT NOT NULL,\n    description TEXT,\n    author TEXT NOT NULL,\n    extensions TEXT,\n    use_storage INTEGER,\n    use_template INTEGER\n);";
-
-// libraries/database/users_to_apps.sql
-var users_to_apps_default = "CREATE TABLE IF NOT EXISTS users_to_apps (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    uid INTEGER,\n    package_name REFERENCES apps (package_name) ON DELETE CASCADE ON UPDATE CASCADE\n);";
-
-// libraries/database/permissions.sql
-var permissions_default = "CREATE TABLE IF NOT EXISTS permissions (\n    id_permission INTEGER PRIMARY KEY AUTOINCREMENT,\n    package_name TEXT REFERENCES apps (package_name) ON DELETE CASCADE ON UPDATE CASCADE,\n    api TEXT NOT NULL,\n    justification TEXT NOT NULL,\n    active INTEGER NOT NULL\n);";
-
-// libraries/database/secure_sources.sql
-var secure_sources_default = "CREATE TABLE IF NOT EXISTS secure_sources (\n  id_source INTEGER PRIMARY KEY AUTOINCREMENT,\n  package_name TEXT REFERENCES apps (package_name) ON DELETE CASCADE ON UPDATE CASCADE,\n  type TEXT NOT NULL,\n  source TEXT NOT NULL,\n  justification TEXT NOT NULL,\n  active INTEGER DEFAULT (0)\n);";
-
-// libraries/database/index.ts
-var database = async () => {
-  await new Promise((resolve) => moduleEmitters.on("Paths:ready", resolve));
-  const database2 = configs.get("database");
-  const sqlite3 = (0, import_sqlite3.verbose)();
-  const connector = new sqlite3.Database(database2.path);
-  await new Promise((resolve) => connector.run(recycle_bin_default, resolve));
-  await new Promise((resolve) => connector.run(shared_default, resolve));
-  await new Promise((resolve) => connector.run(apps_default, resolve));
-  await new Promise((resolve) => connector.run(users_to_apps_default, resolve));
-  await new Promise((resolve) => connector.run(permissions_default, resolve));
-  await new Promise((resolve) => connector.run(secure_sources_default, resolve));
-  return connector;
+// libraries/mongo-db.ts
+var import_mongodb = require("mongodb");
+var mongo = async () => {
+  const { password } = configs.get("keys");
+  const uri = `mongodb://lc:${password}@localhost:27017`;
+  const client = new import_mongodb.MongoClient(uri, {
+    serverApi: {
+      version: import_mongodb.ServerApiVersion.v1,
+      strict: true,
+      deprecationErrors: true
+    }
+  });
+  await client.connect();
+  return client.db("_lc");
 };
 
 // libraries/process.ts
@@ -772,9 +752,9 @@ var process2 = () => ({ title, command, args, proc }) => new Promise((resolve) =
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   builder,
-  database,
   devMode,
   encrypt,
+  mongo,
   paths,
   process
 });

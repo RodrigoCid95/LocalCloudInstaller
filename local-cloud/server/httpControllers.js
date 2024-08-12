@@ -216,7 +216,7 @@ var verifyNotSession = (req, res, next) => {
 };
 
 // controllers/middlewares/tokens.ts
-var import_uuid = require("uuid");
+var import_node_crypto = __toESM(require("node:crypto"));
 function tokens(req, res, next) {
   const model = verifyDevMode.bind(this)();
   if (model) {
@@ -224,10 +224,10 @@ function tokens(req, res, next) {
     return;
   }
   if (!req.session.key) {
-    req.session.key = (0, import_uuid.v4)();
+    req.session.key = import_node_crypto.default.randomUUID();
   }
   if (!req.session.token) {
-    req.session.token = (0, import_uuid.v4)();
+    req.session.token = import_node_crypto.default.randomUUID();
   }
   next();
 }
@@ -607,8 +607,8 @@ async function verifySession2(req, res, next) {
 }
 
 // libraries/classes/Encrypt.ts
-var import_node_crypto = __toESM(require("node:crypto"));
-var import_node_crypto2 = require("node:crypto");
+var import_node_crypto2 = __toESM(require("node:crypto"));
+var import_node_crypto3 = require("node:crypto");
 var import_node_buffer = require("node:buffer");
 var HashType = /* @__PURE__ */ ((HashType2) => {
   HashType2[HashType2["sha256"] = 5] = "sha256";
@@ -722,7 +722,7 @@ var roundsDefault = 5e3;
 function getRandomString(length) {
   var result = "";
   for (let i = 0; i < length; i++) {
-    result += dictionary[(0, import_node_crypto2.randomInt)(0, dictionary.length - 1)];
+    result += dictionary[(0, import_node_crypto3.randomInt)(0, dictionary.length - 1)];
   }
   return result;
 }
@@ -777,10 +777,10 @@ function parseSalt(salt) {
 }
 function generateDigestA(plaintext, conf) {
   const digestSize = conf.id === 5 /* sha256 */ ? 32 : 64;
-  const hashA = (0, import_node_crypto2.createHash)(HashType[conf.id]);
+  const hashA = (0, import_node_crypto3.createHash)(HashType[conf.id]);
   hashA.update(plaintext);
   hashA.update(conf.saltString);
-  const hashB = (0, import_node_crypto2.createHash)(HashType[conf.id]);
+  const hashB = (0, import_node_crypto3.createHash)(HashType[conf.id]);
   hashB.update(plaintext);
   hashB.update(conf.saltString);
   hashB.update(plaintext);
@@ -801,7 +801,7 @@ function generateHash(plaintext, conf) {
   const hashType = HashType[conf.id];
   const digestA = generateDigestA(plaintext, conf);
   const plaintextByteLength = import_node_buffer.Buffer.byteLength(plaintext);
-  const hashDP = (0, import_node_crypto2.createHash)(hashType);
+  const hashDP = (0, import_node_crypto3.createHash)(hashType);
   for (let i = 0; i < plaintextByteLength; i++) {
     hashDP.update(plaintext);
   }
@@ -812,7 +812,7 @@ function generateHash(plaintext, conf) {
   }
   const remainder = plaintextByteLength % digestSize;
   p.set(digestDP.slice(0, remainder), plaintextByteLength - remainder);
-  const hashDS = (0, import_node_crypto2.createHash)(hashType);
+  const hashDS = (0, import_node_crypto3.createHash)(hashType);
   const step18 = 16 + digestA[0];
   for (let i = 0; i < step18; i++) {
     hashDS.update(conf.saltString);
@@ -827,7 +827,7 @@ function generateHash(plaintext, conf) {
   s.set(digestDS.slice(0, saltRemainder), saltByteLength - saltRemainder);
   const rounds = Array(conf.rounds).fill(0);
   const digestC = rounds.reduce((acc, curr, idx) => {
-    const hashC = (0, import_node_crypto2.createHash)(hashType);
+    const hashC = (0, import_node_crypto3.createHash)(hashType);
     if (idx % 2 === 0) {
       hashC.update(acc);
     } else {
@@ -879,18 +879,18 @@ var Encrypt = class {
   verifyHash(plaintext, hash) {
     const salt = hash.slice(0, hash.lastIndexOf("$"));
     const computedHash = this.createHash(plaintext, salt);
-    return (0, import_node_crypto2.timingSafeEqual)(
+    return (0, import_node_crypto3.timingSafeEqual)(
       import_node_buffer.Buffer.from(computedHash, "utf8"),
       import_node_buffer.Buffer.from(hash, "utf8")
     );
   }
   generateKey(key) {
-    return import_node_crypto.default.subtle.importKey("raw", this.encoder.encode(key.slice(0, 16)), { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+    return import_node_crypto2.default.subtle.importKey("raw", this.encoder.encode(key.slice(0, 16)), { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
   }
   async encrypt(key, data) {
     const newKey = await this.generateKey(key);
-    const iv = import_node_crypto.default.getRandomValues(new Uint8Array(12));
-    const encrypted = new Uint8Array(await import_node_crypto.default.subtle.encrypt({ name: "AES-GCM", iv }, newKey, this.encoder.encode(data)));
+    const iv = import_node_crypto2.default.getRandomValues(new Uint8Array(12));
+    const encrypted = new Uint8Array(await import_node_crypto2.default.subtle.encrypt({ name: "AES-GCM", iv }, newKey, this.encoder.encode(data)));
     const combined = new Uint8Array(iv.length + encrypted.length);
     combined.set(iv);
     combined.set(encrypted, iv.length);
@@ -908,7 +908,7 @@ var Encrypt = class {
     }
     const iv = uint8Array.slice(0, 12);
     const data = uint8Array.slice(12, uint8Array.length);
-    const decrypted = await import_node_crypto.default.subtle.decrypt({ name: "AES-GCM", iv }, newKey, data);
+    const decrypted = await import_node_crypto2.default.subtle.decrypt({ name: "AES-GCM", iv }, newKey, data);
     return this.decoder.decode(decrypted);
   }
 };
@@ -920,7 +920,7 @@ var DENIED_ERROR2 = {
   code: "access-denied",
   message: "No tienes permiso para hacer esto!"
 };
-async function decryptRequest(req, res, next) {
+async function decryptRequest(req, _, next) {
   if (verifyDevMode.bind(this)()) {
     next();
     return;
@@ -1047,7 +1047,7 @@ var { GET: GET3, PUT, DELETE } = METHODS;
 var AppsAPIController = class {
   async apps(_, res) {
     const results = await this.appsModel.getApps();
-    res.json(results.map(({ package_name, title, description, author, extensions, useStorage }) => ({ package_name, title, description, author, extensions, useStorage })));
+    res.json(results);
   }
   async appsByUID(req, res) {
     const user = this.usersModel.getUserByUID(Number(req.params.uid || "NaN"));
@@ -1059,7 +1059,7 @@ var AppsAPIController = class {
       return;
     }
     const results = await this.appsModel.getAppsByUID(user.uid);
-    res.json(results.map(({ package_name, title, description, author, extensions, useStorage }) => ({ package_name, title, description, author, extensions, useStorage })));
+    res.json(results);
   }
   async install(req, res) {
     const package_zip = req.files?.package_zip;
@@ -1132,7 +1132,7 @@ AppsAPIController = __decorateClass([
 ], AppsAPIController);
 
 // controllers/apis/auth.ts
-var import_uuid2 = require("uuid");
+var import_node_crypto4 = __toESM(require("node:crypto"));
 var { GET: GET4, POST, DELETE: DELETE2 } = METHODS;
 var AuthAPIController = class {
   async index(req, res) {
@@ -1159,7 +1159,7 @@ var AuthAPIController = class {
             ...app,
             secureSources,
             permissions,
-            token: (0, import_uuid2.v4)(),
+            token: import_node_crypto4.default.randomUUID(),
             useTemplate: app.useTemplate
           };
           req.session.apps[app.package_name] = sessionApp;
@@ -1665,11 +1665,11 @@ RecycleBinController = __decorateClass([
 ], RecycleBinController);
 
 // controllers/apis/shared.ts
-var import_uuid3 = require("uuid");
+var import_node_crypto5 = __toESM(require("node:crypto"));
 var { GET: GET8, POST: POST6, DELETE: DELETE6 } = METHODS;
 var SharedAPIController = class {
   async index(req, res) {
-    const results = await this.sharedModel.find({ uid: req.session.user?.name });
+    const results = await this.sharedModel.find({ uid: req.session.user?.uid });
     res.json(results);
   }
   async create(req, res) {
@@ -1681,12 +1681,12 @@ var SharedAPIController = class {
       });
       return;
     }
-    const uuid = req.session.user?.name || "";
+    const uuid = req.session.user?.uid || NaN;
     const [result] = await this.sharedModel.find({ uid: uuid, path: path2 });
     if (result) {
       res.json(result);
     } else {
-      const newShared = { id: (0, import_uuid3.v4)(), uid: uuid, path: path2 };
+      const newShared = { id: import_node_crypto5.default.randomUUID(), uid: uuid, path: path2 };
       await this.sharedModel.create(newShared);
       res.json(newShared);
     }
@@ -2062,6 +2062,10 @@ var IndexController = class {
   login(_, res) {
     res.render("os/index", { title: "LocalCloud - Iniciar sesi\xF3n", description: "LocalCloud - Iniciar sesi\xF3n" });
   }
+  async test(_, res) {
+    await this.permissionsModel.setActive("66b470a0ee48dd54998cb716", true);
+    res.json(true);
+  }
 };
 __decorateClass([
   Model("UsersModel")
@@ -2070,6 +2074,12 @@ __decorateClass([
   Model("DevModeModel")
 ], IndexController.prototype, "devModeModel", 2);
 __decorateClass([
+  Model("AppsModel")
+], IndexController.prototype, "appsModel", 2);
+__decorateClass([
+  Model("PermissionsModel")
+], IndexController.prototype, "permissionsModel", 2);
+__decorateClass([
   On(GET12, "/"),
   BeforeMiddleware([devMode, CSP, tokens, verifySession])
 ], IndexController.prototype, "dashboard", 1);
@@ -2077,6 +2087,9 @@ __decorateClass([
   On(GET12, "/login"),
   BeforeMiddleware([devMode, CSP, tokens, verifyNotSession])
 ], IndexController.prototype, "login", 1);
+__decorateClass([
+  On(GET12, "/test")
+], IndexController.prototype, "test", 1);
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   APIController,

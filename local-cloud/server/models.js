@@ -111,46 +111,47 @@ var moduleEmitters = new Emitters();
 // models/apps.ts
 var import_node_fs = __toESM(require("node:fs"));
 var import_node_path = __toESM(require("node:path"));
-var import_uuid = require("uuid");
+var import_node_crypto = __toESM(require("node:crypto"));
 var import_unzipper = __toESM(require("unzipper"));
 var AppsModel = class {
   constructor() {
     this.isJSON = (text) => /^[\],:{}\s]*$/.test(text.replace(/\\["\\\/bfnrtu]/g, "@").replace(/"[^"\\\n\r]*"|true|false|null|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?/g, "]").replace(/(?:^|:|,)(?:\s*\[)+/g, ""));
-    this.parse = (results) => results.map((result) => ({
-      package_name: result.package_name,
-      title: result.title,
-      description: result.description,
-      author: result.author,
-      extensions: (result.extensions || "").split("|"),
-      useStorage: result.use_storage === 1 ? true : false,
-      useTemplate: result.use_template === 1 ? true : false
-    }));
   }
-  getAppsByUID(uid) {
-    return new Promise((resolve) => this.database.all(
-      "SELECT apps.package_name, apps.title, apps.description, apps.author, apps.use_storage, apps.use_template FROM users_to_apps INNER JOIN apps ON users_to_apps.package_name = apps.package_name WHERE users_to_apps.uid = ?;",
-      [uid],
-      (error, rows) => error ? resolve([]) : resolve(this.parse(rows))
-    ));
+  get appsCollection() {
+    return this.db.collection("apps");
   }
-  getApps() {
-    return new Promise((resolve) => this.database.all(
-      "SELECT * FROM apps",
-      (error, rows) => error ? resolve([]) : resolve(this.parse(rows))
-    ));
+  get u2aCollection() {
+    return this.db.collection("users_to_apps");
+  }
+  async getAppsByUID(uid) {
+    const appList = [];
+    const assignments = await this.u2aCollection.find({ uid }).toArray();
+    for (const assignment of assignments) {
+      const app = await this.appsCollection.findOne({ package_name: assignment.package_name });
+      if (app) {
+        appList.push({
+          package_name: app.package_name,
+          title: app.title,
+          description: app.description,
+          author: app.author,
+          useTemplate: app.useTemplate
+        });
+      }
+    }
+    return appList;
+  }
+  async getApps() {
+    const results = await this.appsCollection.find({}).toArray();
+    return results.map(({ package_name, title, description, author, useTemplate }) => ({ package_name, title, description, author, useTemplate }));
   }
   getAppByPackageName(package_name) {
-    return new Promise((resolve) => this.database.all(
-      "SELECT * FROM apps WHERE package_name = ?",
-      [package_name],
-      (error, rows) => error ? resolve(null) : resolve(rows[0])
-    ));
+    return this.appsCollection.findOne({ package_name });
   }
   async install(package_name, data, update = false) {
     if (update) {
       await this.uninstall(package_name, true);
     }
-    const tempDir = import_node_path.default.join(this.paths.apps, "temp", (0, import_uuid.v4)());
+    const tempDir = import_node_path.default.join(this.paths.apps, "temp", import_node_crypto.default.randomUUID());
     import_node_fs.default.mkdirSync(tempDir, { recursive: true });
     await import_unzipper.default.Open.buffer(data).then((d) => d.extract({ path: tempDir }));
     let useTemplate = false;
@@ -205,26 +206,33 @@ var AppsModel = class {
       api,
       justification: permissionList[api]
     }));
-    await new Promise((resolve) => this.database.run(
-      "INSERT INTO apps (package_name, title, description, author, extensions, use_storage, use_template) VALUES (?, ?, ?, ?, ?, ?, ?);",
-      [package_name, title, description, author, extensions.join("|"), useStorage ? 1 : 0, useTemplate ? 1 : 0],
-      resolve
-    ));
+    await this.appsCollection.insertOne({
+      package_name,
+      title,
+      description,
+      author,
+      extensions: extensions.join("|"),
+      useStorage,
+      useTemplate
+    });
     for (const permission of permissions) {
-      await new Promise((resolve) => this.database.run(
-        "INSERT INTO permissions (package_name, api, justification, active) VALUES (?, ?, ?, ?)",
-        [package_name, permission.api, permission.justification || "Sin justificaci\xF3n.", true],
-        resolve
-      ));
+      await this.db.collection("permissions").insertOne({
+        package_name,
+        api: permission.api,
+        justification: permission.justification || "Sin justificaci\xF3n.",
+        active: true
+      });
     }
     for (const [name, srcs] of Object.entries(sources)) {
       if (["image", "media", "object", "script", "style", "worker", "font", "connect"].includes(name)) {
         for (const src of srcs) {
-          await new Promise((resolve) => this.database.run(
-            "INSERT INTO secure_sources (package_name, type, source, justification, active) VALUES (?, ?, ?, ?, ?)",
-            [package_name, name, src.source, src.justification || "Sin justificaci\xF3n.", true],
-            resolve
-          ));
+          await this.db.collection("secure_sources").insertOne({
+            package_name,
+            type: name,
+            source: src.source,
+            justification: src.justification || "Sin justificaci\xF3n.",
+            active: true
+          });
         }
       }
     }
@@ -252,28 +260,12 @@ var AppsModel = class {
     return true;
   }
   async uninstall(package_name, skipAssignments = false) {
-    await new Promise((resolve) => this.database.run(
-      "DELETE FROM secure_sources WHERE package_name = ?",
-      [package_name],
-      resolve
-    ));
-    await new Promise((resolve) => this.database.run(
-      "DELETE FROM permissions WHERE package_name = ?",
-      [package_name],
-      resolve
-    ));
+    await this.db.collection("secure_sources").deleteMany({ package_name });
+    await this.db.collection("permissions").deleteMany({ package_name });
     if (!skipAssignments) {
-      await new Promise((resolve) => this.database.run(
-        "DELETE FROM users_to_apps WHERE package_name = ?",
-        [package_name],
-        resolve
-      ));
+      await this.u2aCollection.deleteMany({ package_name });
     }
-    await new Promise((resolve) => this.database.run(
-      "DELETE FROM apps WHERE package_name = ?",
-      [package_name],
-      resolve
-    ));
+    await this.appsCollection.deleteMany({ package_name });
     if (!skipAssignments) {
       const appStorage = this.paths.getAppStorage(package_name);
       if (import_node_fs.default.existsSync(appStorage)) {
@@ -289,8 +281,8 @@ var AppsModel = class {
   }
 };
 __decorateClass([
-  Library("database")
-], AppsModel.prototype, "database", 2);
+  Library("mongo")
+], AppsModel.prototype, "db", 2);
 __decorateClass([
   Library("paths")
 ], AppsModel.prototype, "paths", 2);
@@ -319,7 +311,7 @@ __decorateClass([
 
 // models/dev-mode.ts
 var import_node_fs2 = __toESM(require("node:fs"));
-var import_uuid2 = require("uuid");
+var import_node_crypto2 = __toESM(require("node:crypto"));
 var DevModeModel = class {
   getUser() {
     const PASSWD_CONTENT = import_node_fs2.default.readFileSync(this.paths.passwd, "utf8");
@@ -339,22 +331,11 @@ var DevModeModel = class {
     }
   }
   async getApps(uid) {
-    const apps = await new Promise((resolve) => this.database.all(
-      "SELECT apps.package_name, apps.title, apps.description, apps.author, apps.use_template FROM users_to_apps INNER JOIN apps ON users_to_apps.package_name = apps.package_name WHERE users_to_apps.uid = ?;",
-      [uid || ""],
-      (error, rows) => error ? resolve([]) : resolve(rows.map((result) => ({
-        package_name: result.package_name,
-        title: result.title,
-        description: result.description,
-        author: result.author,
-        extensions: (result.extensions || "").split("|"),
-        useTemplate: result.use_template === 1
-      })))
-    ));
+    const apps = await this.db.collection("apps").find({ uid }).toArray().then((results) => results.map(({ package_name, title, description, author, useTemplate }) => ({ package_name, title, description, author, useTemplate })));
     const appList = {};
     for (const app of apps) {
       const sessionApp = {
-        token: (0, import_uuid2.v4)(),
+        token: import_node_crypto2.default.randomUUID(),
         ...app,
         secureSources: [],
         permissions: []
@@ -368,8 +349,8 @@ __decorateClass([
   Library("devMode")
 ], DevModeModel.prototype, "devMode", 2);
 __decorateClass([
-  Library("database")
-], DevModeModel.prototype, "database", 2);
+  Library("mongo")
+], DevModeModel.prototype, "db", 2);
 __decorateClass([
   Library("paths")
 ], DevModeModel.prototype, "paths", 2);
@@ -562,142 +543,100 @@ __decorateClass([
 ], FileSystemModel.prototype, "run", 2);
 
 // models/shared.ts
+var import_mongodb = require("mongodb");
 var SharedModel = class {
-  async find(query) {
-    let strQuery = "SELECT * FROM shared";
-    const opts = [];
-    if (query) {
-      const where = [];
-      const entries = Object.entries(query);
-      for (let [key, value] of entries) {
-        if (key === "path") {
-          opts.push(value.join("|"));
-        } else {
-          opts.push(value);
-        }
-        where.push(`${key} = ?`);
+  get collection() {
+    return this.db.collection("shared");
+  }
+  async find(query = {}) {
+    const filter = {};
+    const keys = Object.keys(query);
+    for (const key of keys) {
+      if (key === "id") {
+        filter["_id"] = new import_mongodb.ObjectId(query[key]);
+      } else {
+        filter[key] = query[key];
       }
-      strQuery += ` WHERE ${where.join(" AND ")};`;
     }
-    const results = await new Promise((resolve) => this.database.all(
-      strQuery,
-      opts,
-      (error, rows) => error ? resolve([]) : resolve(rows)
-    ));
+    const results = await this.collection.find(filter).toArray();
     return results.map((item) => ({
-      id: item.id,
+      id: item._id.toString(),
       uid: item.uid,
-      path: item.path.split("|")
+      path: item.path
     }));
   }
-  create(shared) {
-    return new Promise((resolve) => this.database.run(
-      "INSERT INTO shared ( id, uid, path ) VALUES (?, ?, ?)",
-      [shared.id, shared.uid, shared.path.join("|")],
-      resolve
-    ));
+  async create(shared) {
+    await this.collection.insertOne(shared);
   }
-  delete(id) {
-    return new Promise((resolve) => this.database.run(
-      "DELETE FROM shared WHERE id = ?",
-      [id],
-      resolve
-    ));
+  async delete(id) {
+    await this.collection.deleteOne({ _id: new import_mongodb.ObjectId(id) });
   }
 };
 __decorateClass([
-  Library("database")
-], SharedModel.prototype, "database", 2);
+  Library("mongo")
+], SharedModel.prototype, "db", 2);
 
 // models/permissions.ts
+var import_mongodb2 = require("mongodb");
 var PermissionsModel = class {
-  async find(query) {
-    let strQuery = "SELECT * FROM permissions";
-    const values = [];
-    if (query) {
-      const where = [];
-      const entries = Object.entries(query);
-      for (const [key, value] of entries) {
-        where.push(`${key} = ?`);
-        values.push(value);
-      }
-      strQuery += ` WHERE ${where.join(" AND ")}`;
-    }
-    const results = await new Promise((resolve) => this.database.all(
-      strQuery,
-      values,
-      (error, rows) => error ? resolve([]) : resolve(rows)
-    ));
-    return results.map((result) => ({
-      id: result.id_permission,
-      package_name: result.package_name,
-      api: result.api,
-      justification: result.justification,
-      active: result.active
-    }));
+  get collection() {
+    return this.db.collection("permissions");
+  }
+  async find(query = {}) {
+    return this.collection.find(query).toArray().then((results) => results.map(({ _id, package_name, api, justification, active }) => ({ id: _id.toString(), package_name, api, justification, active })));
   }
   async setActive(id, active) {
-    await new Promise((resolve) => this.database.run(
-      "UPDATE permissions set active = ? WHERE id_permission = ?",
-      [active, id],
-      resolve
-    ));
+    await this.collection.updateOne({ _id: new import_mongodb2.ObjectId(id) }, { $set: { active } });
   }
 };
 __decorateClass([
-  Library("database")
-], PermissionsModel.prototype, "database", 2);
+  Library("mongo")
+], PermissionsModel.prototype, "db", 2);
 
 // models/recycle-bin.ts
+var import_mongodb3 = require("mongodb");
 var import_node_fs4 = __toESM(require("node:fs"));
-var import_uuid3 = require("uuid");
 var RecycleBinModel = class {
+  get collection() {
+    return this.db.collection("recycle_bin");
+  }
   async moveToRecycleBin(user, strPath, path5) {
-    const id = (0, import_uuid3.v4)();
-    const newPath = this.paths.getRecycleBinItem(user.name, id);
-    import_node_fs4.default.cpSync(strPath, newPath, { recursive: true });
-    import_node_fs4.default.rmSync(strPath, { recursive: true, force: true });
     const date = /* @__PURE__ */ new Date();
     const year = date.getFullYear();
     const month = date.getMonth() + 1;
     const day = date.getDate();
     const hours = date.getHours();
     const minutes = date.getMinutes();
-    await new Promise((resolve) => this.database.run(
-      "INSERT INTO recycle_bin (id, uid, path, date) VALUES (?, ?, ?, ?)",
-      [id, user.uid, path5.join("|"), `${year.toString()}/${month < 10 ? `0${month.toString()}` : month.toString()}/${day < 10 ? `0${day.toString()}` : day.toString()} ${hours < 10 ? `0${hours.toString()}` : hours.toString()}:${minutes < 10 ? `0${minutes.toString()}` : minutes.toString()}`],
-      resolve
-    ));
+    const res = await this.collection.insertOne({
+      uid: user.uid,
+      path: path5,
+      date: `${year.toString()}/${month < 10 ? `0${month.toString()}` : month.toString()}/${day < 10 ? `0${day.toString()}` : day.toString()} ${hours < 10 ? `0${hours.toString()}` : hours.toString()}:${minutes < 10 ? `0${minutes.toString()}` : minutes.toString()}`
+    });
+    const id = res.insertedId.toString();
+    const newPath = this.paths.getRecycleBinItem(user.name, id);
+    import_node_fs4.default.cpSync(strPath, newPath, { recursive: true });
+    import_node_fs4.default.rmSync(strPath, { recursive: true, force: true });
   }
   async findByUID(uid) {
-    const results = await new Promise((resolve) => this.database.all(
-      "SELECT * FROM recycle_bin WHERE uid = ?",
-      [uid],
-      (error, rows) => error ? resolve([]) : resolve(rows)
-    ));
+    const results = await this.collection.find({ uid }).toArray();
     return results.map((item) => ({
-      id: item.id,
+      id: item._id.toString(),
       uid: item.uid,
-      path: item.path.split("|"),
+      path: item.path,
       date: item.date
     }));
   }
   async findByID(id) {
-    const item = await new Promise((resolve) => this.database.get(
-      "SELECT * FROM recycle_bin WHERE id = ?",
-      [id],
-      (error, rows) => error ? resolve(void 0) : resolve(rows)
-    ));
-    let result = void 0;
-    if (item) {
-      result = {
-        id: item.id,
-        uuid: item.uid,
-        path: item.path.split("|"),
-        date: item.date
+    const result = await this.collection.findOne({ _id: new import_mongodb3.ObjectId(id) });
+    if (result) {
+      return {
+        id: result._id.toString(),
+        uid: result.uid,
+        path: result.path,
+        date: result.date
       };
     }
-    return result;
+    return null;
   }
   async restore(name, id, path5) {
     let newPath = path5;
@@ -717,24 +656,14 @@ var RecycleBinModel = class {
     }
     import_node_fs4.default.cpSync(oldPath, newPath, { recursive: true });
     import_node_fs4.default.rmSync(oldPath, { recursive: true, force: true });
-    await new Promise((resolve) => this.database.run(
-      "DELETE FROM recycle_bin WHERE id = ?",
-      [id],
-      resolve
-    ));
+    await this.collection.deleteOne({ _id: new import_mongodb3.ObjectId(id) });
   }
-  deleteFromDB(uid, id) {
-    let strQuery = "DELETE FROM recycle_bin WHERE uid = ?";
-    const opts = [uid];
+  async deleteFromDB(uid, id) {
+    const query = { uid };
     if (id) {
-      strQuery += " AND id = ?";
-      opts.push(id);
+      query["_id"] = new import_mongodb3.ObjectId(id);
     }
-    return new Promise((resolve) => this.database.run(
-      strQuery,
-      opts,
-      resolve
-    ));
+    await this.collection.deleteMany(query);
   }
   async delete(user, id) {
     const path5 = this.paths.getRecycleBinItem(user.name, id);
@@ -748,33 +677,31 @@ var RecycleBinModel = class {
   }
 };
 __decorateClass([
-  Library("database")
-], RecycleBinModel.prototype, "database", 2);
-__decorateClass([
   Library("paths")
 ], RecycleBinModel.prototype, "paths", 2);
+__decorateClass([
+  Library("mongo")
+], RecycleBinModel.prototype, "db", 2);
 
 // models/sources.ts
+var import_mongodb4 = require("mongodb");
 var SourcesModel = class {
-  async find(query) {
-    let strQuery = "SELECT * FROM secure_sources";
-    const values = [];
-    if (query) {
-      const where = [];
-      const entries = Object.entries(query);
-      for (const [key, value] of entries) {
-        where.push(`${key} = ?`);
-        values.push(value);
+  get collection() {
+    return this.db.collection("secure_sources");
+  }
+  async find(query = {}) {
+    const filter = {};
+    const keys = Object.keys(query);
+    for (const key of keys) {
+      if (key === "id") {
+        filter["_id"] = new import_mongodb4.ObjectId(query[key]);
+      } else {
+        filter[key] = query[key];
       }
-      strQuery += ` WHERE ${where.join(" AND ")}`;
     }
-    const results = await new Promise((resolve) => this.database.all(
-      strQuery,
-      values,
-      (error, rows) => error ? resolve([]) : resolve(rows)
-    ));
+    const results = await this.collection.find(filter).toArray();
     return results.map((result) => ({
-      id: result.id_source,
+      id: result._id.toString(),
       package_name: result.package_name,
       type: result.type,
       source: result.source,
@@ -783,16 +710,12 @@ var SourcesModel = class {
     }));
   }
   async setActive(id, active) {
-    await new Promise((resolve) => this.database.run(
-      "UPDATE secure_sources set active = ? WHERE id_source = ?",
-      [active ? 1 : 0, id],
-      resolve
-    ));
+    await this.collection.updateOne({ _id: new import_mongodb4.ObjectId(id) }, { $set: { active } });
   }
 };
 __decorateClass([
-  Library("database")
-], SourcesModel.prototype, "database", 2);
+  Library("mongo")
+], SourcesModel.prototype, "db", 2);
 
 // models/storages.ts
 var import_node_fs5 = __toESM(require("node:fs"));
@@ -847,6 +770,9 @@ var import_node_fs6 = __toESM(require("node:fs"));
 var import_node_path4 = __toESM(require("node:path"));
 var import_ini = __toESM(require("ini"));
 var UsersModel = class {
+  get u2aCollection() {
+    return this.db.collection("users_to_apps");
+  }
   loadConfig(name) {
     const SMB_CONFIG = import_node_fs6.default.readFileSync(this.paths.samba, "utf8");
     const smbConfig = import_ini.default.parse(SMB_CONFIG);
@@ -1031,18 +957,10 @@ var UsersModel = class {
     console.log("------------------------------ End Delete User ----------------------------------");
   }
   async assignApp(uid, package_name) {
-    await new Promise((resolve) => this.database.run(
-      "INSERT INTO users_to_apps (uid, package_name) VALUES (?, ?);",
-      [uid, package_name],
-      resolve
-    ));
+    await this.u2aCollection.insertOne({ uid, package_name });
   }
   async unassignApp(uid, package_name) {
-    await new Promise((resolve) => this.database.run(
-      "DELETE FROM users_to_apps WHERE uid = ? AND package_name = ?;",
-      [uid, package_name],
-      resolve
-    ));
+    await this.u2aCollection.deleteMany({ uid, package_name });
   }
   getUserConfig(name) {
     const userHomePath = import_node_path4.default.join(this.paths.getUser(name), ".lc");
@@ -1065,8 +983,8 @@ __decorateClass([
   Library("encrypt")
 ], UsersModel.prototype, "encrypt", 2);
 __decorateClass([
-  Library("database")
-], UsersModel.prototype, "database", 2);
+  Library("mongo")
+], UsersModel.prototype, "db", 2);
 __decorateClass([
   Library("process")
 ], UsersModel.prototype, "run", 2);
