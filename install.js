@@ -1,9 +1,8 @@
-#!/usr/bin/env node
-
 const os = require('node:os')
 const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
+const tty = require('node:tty')
 const read = (prompt) => new Promise(resolve => {
   process.stdout.write(prompt)
   process.stdin.resume()
@@ -11,7 +10,6 @@ const read = (prompt) => new Promise(resolve => {
   process.stdin.once('data', data => resolve(data.trim()))
 })
 const readPassword = (prompt) => {
-  const tty = require('node:tty')
   return new Promise(resolve => {
     process.stdout.write(prompt)
     if (tty.isatty(1)) {

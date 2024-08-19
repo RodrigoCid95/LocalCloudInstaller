@@ -89,8 +89,7 @@ mongosh --host localhost --port 27017 admin --eval "db.createUser({
 })"
 echo "$PASSWORD" > /etc/local-cloud/mongod
 
-chmod +x ./install
-./install
+node ./install
 systemctl enable local-cloud
 systemctl start local-cloud
 systemctl start nginx
