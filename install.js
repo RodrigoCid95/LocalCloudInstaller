@@ -83,6 +83,7 @@ const send = async ({ api, data = {} }) => {
       }
     })
   })
+  await new Promise(resolve => setTimeout(resolve, 1500))
   const appsRes = await fetch('http://localhost:3000/api/apps')
   const appsList = await appsRes.json()
   if (Array.isArray(appsList) && appsList.length === 0) {
@@ -161,4 +162,6 @@ server {
     }
 }`
   fs.writeFileSync('/etc/nginx/sites-available/default', NGINX_CONFIGURATION, 'utf-8')
+  serverProcess.kill(9)
+  process.exit(1)
 })()
