@@ -1,5 +1,5 @@
 const os = require('node:os')
-const { spawn, fork } = require('node:child_process')
+const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 const tty = require('node:tty')
@@ -73,7 +73,7 @@ const send = async ({ api, data = {} }) => {
   })
   let step = 0
   const stop = os.availableParallelism() + 1
-  const serverProcess = fork('npm', ['start', '--', '--maintenance-mode'], { cwd: '/etc/local-cloud' })
+  const serverProcess = spawn('npm', ['start', '--', '--maintenance-mode'], { cwd: '/etc/local-cloud' })
   await new Promise(resolve => {
     console.log('Iniciando servidor ...')
     serverProcess.stdout.on('data', () => {
@@ -162,6 +162,6 @@ server {
     }
 }`
   fs.writeFileSync('/etc/nginx/sites-available/default', NGINX_CONFIGURATION, 'utf-8')
-  serverProcess.kill(9)
+  serverProcess.kill('SIGILL')
   process.exit(1)
 })()

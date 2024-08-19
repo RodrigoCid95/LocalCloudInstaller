@@ -7,13 +7,15 @@ if command -v node &>/dev/null; then
 		echo "Actualizando Node.JS ..."
 		curl -fsSL https://deb.nodesource.com/setup_22.x -o nodesource_setup.sh
 		bash nodesource_setup.sh
-		apt-get install -y nodejs
+		apt install -y nodejs
+		rm nodesource_setup.sh
 	fi
 else
 	echo "Instalando Nodoe.JS LTS..."
 	curl -fsSL https://deb.nodesource.com/setup_22.x -o nodesource_setup.sh
 	bash nodesource_setup.sh
-	apt-get install -y nodejs
+	apt install -y nodejs
+	rm nodesource_setup.sh
 fi
 
 if ! dpkg -l | grep -q "^ii mongodb-org"; then
