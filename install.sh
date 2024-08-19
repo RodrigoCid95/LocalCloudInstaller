@@ -9,13 +9,13 @@ if command -v node &>/dev/null; then
 		bash nodesource_setup.sh
 		apt install -y nodejs
 		rm nodesource_setup.sh
+	else
+		echo "Instalando Nodoe.JS LTS..."
+		curl -fsSL https://deb.nodesource.com/setup_22.x -o nodesource_setup.sh
+		bash nodesource_setup.sh
+		apt install -y nodejs
+		rm nodesource_setup.sh
 	fi
-else
-	echo "Instalando Nodoe.JS LTS..."
-	curl -fsSL https://deb.nodesource.com/setup_22.x -o nodesource_setup.sh
-	bash nodesource_setup.sh
-	apt install -y nodejs
-	rm nodesource_setup.sh
 fi
 
 if ! dpkg -l | grep -q "^ii mongodb-org"; then
@@ -81,15 +81,12 @@ mongosh --host localhost --port 27017 admin --eval "db.createUser({
   user: 'lc',
   pwd: '$PASSWORD',
   roles: [
-		{ role: 'readWrite', db: '_lc' }
+  	{ role: 'readWrite', db: '_lc' }
   ]
 })"
 echo "$PASSWORD" > /etc/local-cloud/mongod
 
 node ./install.js
-systemctl enable local-cloud
-systemctl start local-cloud
-systemctl start nginx
 IP=$(hostname -I)
 IP=$(echo "$IP" | tr -d '[[:space:]]')
-echo "Puedes iniciar sesión desde https://$IP"
+echo "Después de reiniciar el sistema, puedes iniciar sesión desde https://$IP"
