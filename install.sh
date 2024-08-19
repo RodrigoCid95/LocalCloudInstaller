@@ -1,3 +1,5 @@
+#!/bin/bash
+
 if command -v node &>/dev/null; then
 	NODE_VERSION=$(node -v | grep -oP '\d+\.\d+\.\d+')
 	NODE_MAJOR_VERSION=$(echo "$NODE_VERSION" | cut -d. -f1)
@@ -19,6 +21,7 @@ if ! dpkg -l | grep -q "^ii mongodb-org"; then
 	apt install -y gnupg curl
 	curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor
 	echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+	apt update
 	apt install -y mongodb-org
 	echo "mongodb-org hold" | dpkg --set-selections
 	echo "mongodb-org-database hold" | dpkg --set-selections
