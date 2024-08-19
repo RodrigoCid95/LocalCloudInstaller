@@ -12,12 +12,14 @@ if command -v node &>/dev/null; then
 	NODE_MAJOR_VERSION=$(echo "$NODE_VERSION" | cut -d. -f1)
 	if [ "$NODE_MAJOR_VERSION" -lt 20 ]; then
 		echo "Actualizando Node.JS ..."
-		curl -fsSL https://deb.nodesource.com/setup_lts.x | -E bash -
+		curl -fsSL https://deb.nodesource.com/setup_lts.x -o nodesource_setup.sh
+		bash nodesource_setup.sh
 		apt-get install -y nodejs
 	fi
 else
 	echo "Instalando Nodoe.JS LTS..."
-	curl -fsSL https://deb.nodesource.com/setup_lts.x | -E bash -
+	curl -fsSL https://deb.nodesource.com/setup_lts.x -o nodesource_setup.sh
+	bash nodesource_setup.sh
 	apt-get install -y nodejs
 fi
 
