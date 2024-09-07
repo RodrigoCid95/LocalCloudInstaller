@@ -1,5 +1,73 @@
 const isRelease = true;
 const isDebugger = false;
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+
+// node_modules/px.io/injectables/config.js
+var configPath = "./config.js";
+var configs = require(configPath).configs;
+
+// node_modules/px.io/injectables/emitters.js
+var Emitter = class {
+  #CALLBACKS = {};
+  on(callback) {
+    const uuid = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c == "x" ? r : r & 3 | 8;
+      return v.toString(16);
+    });
+    this.#CALLBACKS[uuid] = callback;
+    return uuid;
+  }
+  off(uuid) {
+    delete this.#CALLBACKS[uuid];
+  }
+  emit(args) {
+    const callbacks = Object.values(this.#CALLBACKS);
+    for (const callback of callbacks) {
+      callback(args);
+    }
+  }
+};
+var Emitters = class _Emitters {
+  #EMITTERS = /* @__PURE__ */ new Map();
+  on(event, callback) {
+    if (!this.#EMITTERS.has(event)) {
+      this.#EMITTERS.set(event, _Emitters.createEmitter());
+    }
+    return this.#EMITTERS.get(event)?.on(callback) || "";
+  }
+  off(event, uuid) {
+    this.#EMITTERS.get(event)?.off(uuid);
+  }
+  emit(event, args) {
+    this.#EMITTERS.get(event)?.emit(args);
+  }
+};
+Emitters.createEmitter = () => {
+  return new Emitter();
+};
+var moduleEmitters = new Emitters();
 
 // node_modules/px.io/injectables/flags.js
 var Flags = class {
@@ -17,8 +85,7 @@ var Flags = class {
       thisOpt = argList[a].trim();
       opt = thisOpt.replace(/^\-+/, "");
       if (opt === thisOpt) {
-        if (curOpt)
-          this.args[curOpt] = opt;
+        if (curOpt) this.args[curOpt] = opt;
         curOpt = null;
       } else {
         curOpt = opt;
@@ -37,14 +104,10 @@ var Flags = class {
 };
 var flags = new Flags();
 
-// node_modules/px.io/injectables/main.js
-var configsPath = "./config.js";
-var configs = require(configsPath).configs;
-
 // node_modules/px.io/injectables/main.http.js
 var initHttpServer = ({ onMessage = console.log } = {}) => {
-  const configPath = "./config.js";
-  const { configs: configs2 } = require(configPath);
+  const configPath2 = "./config.js";
+  const { configs: configs2 } = require(configPath2);
   const httpRoutersPath = "./http.js";
   const routers = require(httpRoutersPath).default;
   const express = require("express");
@@ -110,32 +173,63 @@ ${Object.keys(interfaces).join(", ")}`);
     server = createServer(app);
   }
   if (!server) {
-    const http2 = require("http");
-    server = http2.createServer(app);
+    const http = require("http");
+    server = http.createServer(app);
   }
-  server.listen(port, () => {
+  const listen = server.listen(port, () => {
     onMessage(`Servidor corriendo en: http://localhost:${port}${externalIp ? ` y http://${externalIp}:${port}` : ""}`);
   });
   if (events.beforeStarting) {
     events.beforeStarting(app);
   }
+  process.on("SIGTERM", () => {
+    onMessage("SIGTERM signal received: closing HTTP server");
+    listen.close(() => {
+      onMessage("HTTP server closed");
+    });
+  });
   return { http: server, app };
 };
 
-// node_modules/px.io/mods/main.ts
-var type = flags.get("type");
-var log = (message) => {
-  if (isRelease) {
-    console.log(message);
-  } else {
-    process.send(message);
+// main.ts
+var import_node_cluster = __toESM(require("node:cluster"));
+if (import_node_cluster.default.isPrimary) {
+  const os = require("node:os");
+  const numCPUs = os.availableParallelism();
+  console.log(`
+
+Master ${process.pid} is running`, `
+${numCPUs} workers:
+`);
+  const Store = {
+    store: /* @__PURE__ */ new Map(),
+    get: (sid) => Store.store.get(sid) || null,
+    set: (sid, session) => {
+      Store.store.set(sid, session);
+      return null;
+    },
+    destroy: (sid) => {
+      Store.store.delete(sid);
+      return null;
+    },
+    length: () => {
+      Store.store.size;
+      return null;
+    },
+    all: () => Array.from(Store.store.values()),
+    clear: () => Store.store.clear()
+  };
+  const PORTS = Array.from({ length: numCPUs }, (_, i) => 3e3 + i);
+  for (const PORT of PORTS) {
+    const child = import_node_cluster.default.fork({ PORT });
+    child.on("message", (message) => {
+      const { uid, event, args = [] } = message;
+      const e = Store[event];
+      const result = e(...args);
+      child.send({ uid, data: result });
+    });
   }
-};
-var http = void 0;
-if (type.includes("http")) {
-  http = initHttpServer({ onMessage: log }).http;
-}
-if (type.includes("sockets")) {
-  initSocketsServer({ http, onError: log });
+} else {
+  initHttpServer({ onMessage: console.log });
 }
 //# sourceMappingURL=main.js.map

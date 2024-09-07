@@ -40,7 +40,7 @@ __export(libraries_exports, {
 });
 module.exports = __toCommonJS(libraries_exports);
 
-// node_modules/px.io/injectables/libraries.js
+// node_modules/px.io/injectables/config.js
 var configPath = "./config.js";
 var configs = require(configPath).configs;
 

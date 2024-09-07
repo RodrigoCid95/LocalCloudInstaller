@@ -32,8 +32,7 @@ var __decorateClass = (decorators, target, key, kind) => {
   for (var i = decorators.length - 1, decorator; i >= 0; i--)
     if (decorator = decorators[i])
       result = (kind ? decorator(target, key, result) : decorator(result)) || result;
-  if (kind && result)
-    __defProp(target, key, result);
+  if (kind && result) __defProp(target, key, result);
   return result;
 };
 
@@ -53,18 +52,9 @@ __export(models_exports, {
 });
 module.exports = __toCommonJS(models_exports);
 
-// node_modules/px.io/injectables/models.js
-var libsPath = "./libs.js";
-var libraries = require(libsPath).libraries;
-function Library(nameLib) {
-  return (target, propertyKey) => {
-    Object.defineProperty(target, propertyKey, {
-      get() {
-        return libraries.get(nameLib);
-      }
-    });
-  };
-}
+// node_modules/px.io/injectables/config.js
+var configPath = "./config.js";
+var configs = require(configPath).configs;
 
 // node_modules/px.io/injectables/emitters.js
 var Emitter = class {
@@ -107,6 +97,19 @@ Emitters.createEmitter = () => {
   return new Emitter();
 };
 var moduleEmitters = new Emitters();
+
+// node_modules/px.io/injectables/models.js
+var libsPath = "./libs.js";
+var libraries = require(libsPath).libraries;
+function Library(nameLib) {
+  return (target, propertyKey) => {
+    Object.defineProperty(target, propertyKey, {
+      get() {
+        return libraries.get(nameLib);
+      }
+    });
+  };
+}
 
 // models/apps.ts
 var import_node_fs = __toESM(require("node:fs"));

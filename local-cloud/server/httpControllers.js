@@ -32,8 +32,7 @@ var __decorateClass = (decorators, target, key, kind) => {
   for (var i = decorators.length - 1, decorator; i >= 0; i--)
     if (decorator = decorators[i])
       result = (kind ? decorator(target, key, result) : decorator(result)) || result;
-  if (kind && result)
-    __defProp(target, key, result);
+  if (kind && result) __defProp(target, key, result);
   return result;
 };
 
@@ -60,6 +59,52 @@ __export(controllers_exports, {
 });
 module.exports = __toCommonJS(controllers_exports);
 
+// node_modules/px.io/injectables/config.js
+var configPath = "./config.js";
+var configs = require(configPath).configs;
+
+// node_modules/px.io/injectables/emitters.js
+var Emitter = class {
+  #CALLBACKS = {};
+  on(callback) {
+    const uuid = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c == "x" ? r : r & 3 | 8;
+      return v.toString(16);
+    });
+    this.#CALLBACKS[uuid] = callback;
+    return uuid;
+  }
+  off(uuid) {
+    delete this.#CALLBACKS[uuid];
+  }
+  emit(args) {
+    const callbacks = Object.values(this.#CALLBACKS);
+    for (const callback of callbacks) {
+      callback(args);
+    }
+  }
+};
+var Emitters = class _Emitters {
+  #EMITTERS = /* @__PURE__ */ new Map();
+  on(event, callback) {
+    if (!this.#EMITTERS.has(event)) {
+      this.#EMITTERS.set(event, _Emitters.createEmitter());
+    }
+    return this.#EMITTERS.get(event)?.on(callback) || "";
+  }
+  off(event, uuid) {
+    this.#EMITTERS.get(event)?.off(uuid);
+  }
+  emit(event, args) {
+    this.#EMITTERS.get(event)?.emit(args);
+  }
+};
+Emitters.createEmitter = () => {
+  return new Emitter();
+};
+var moduleEmitters = new Emitters();
+
 // node_modules/px.io/injectables/controllers.js
 var modlsPath = "./modls.js";
 var models = require(modlsPath).models;
@@ -72,11 +117,16 @@ function Model(model) {
     });
   };
 }
-
-// node_modules/px.io/injectables/controllers.http.js
-function Namespace(namespace, mws = {}) {
+function Namespace(namespace) {
   return function(constructor) {
     constructor.$namespace = namespace;
+    return constructor;
+  };
+}
+
+// node_modules/px.io/injectables/controllers.http.js
+function Middlewares(mws = {}) {
+  return function(constructor) {
     if (mws.before) {
       constructor.$beforeMiddlewares = mws.before;
     }
@@ -86,79 +136,139 @@ function Namespace(namespace, mws = {}) {
     return constructor;
   };
 }
-var registerRoute = (target, propertyKey, descriptor) => {
+var registerRoute = ({
+  path: path2,
+  method,
+  target,
+  propertyKey,
+  descriptor
+}) => {
   if (!target.hasOwnProperty("$routes")) {
     target.$routes = {};
   }
-  if (!target.$routes.hasOwnProperty(propertyKey)) {
-    target.$routes[propertyKey] = {
-      methods: [],
-      path: "",
-      method: descriptor?.value,
-      middlewares: {
-        after: [],
-        before: []
+  if (!target.$routes.hasOwnProperty(path2)) {
+    target.$routes[path2] = {};
+  }
+  target.$routes[path2][method] = {
+    propertyKey,
+    callback: descriptor?.value,
+    middlewares: {
+      after: [],
+      before: []
+    }
+  };
+};
+var findRoute = (target, propertyKey) => {
+  for (const [path2, route] of Object.entries(target.$routes)) {
+    for (const [method, value] of Object.entries(route)) {
+      if (propertyKey === value.propertyKey) {
+        return { path: path2, method };
       }
-    };
-  } else {
-    target.$routes[propertyKey].method = descriptor?.value;
+    }
   }
 };
-function AfterMiddleware(mws) {
+function After(mws) {
   return (target, propertyKey, descriptor) => {
-    registerRoute(target, propertyKey, descriptor);
-    for (let mw of mws) {
-      if (typeof mw === "string") {
-        if (!target.hasOwnProperty(mw)) {
-          console.error(`
+    const route = findRoute(target, propertyKey);
+    if (route) {
+      for (let mw of mws) {
+        if (typeof mw === "string") {
+          if (!target.hasOwnProperty(mw)) {
+            console.error(`
 ${target.name}: El middleware ${mw} no est\xE1 declarado!`);
-          return descriptor;
-        }
-        mw = target[mw];
-      }
-      target.$routes[propertyKey].middlewares.after.push(mw);
-    }
-    if (descriptor) {
-      return descriptor;
-    }
-  };
-}
-function BeforeMiddleware(mws) {
-  return (target, propertyKey, descriptor) => {
-    registerRoute(target, propertyKey, descriptor);
-    for (let mw of mws) {
-      if (typeof mw === "string") {
-        if (!target.hasOwnProperty(mw)) {
-          console.error(`
-${target.name}: El middleware ${mw} no est\xE1 declarado!`);
-          if (descriptor) {
-            return descriptor;
+            if (descriptor) {
+              return descriptor;
+            }
           }
+          mw = target[mw];
         }
-        mw = target[mw];
+        const { path: path2, method } = findRoute(target, propertyKey);
+        target.$routes[path2][method].middlewares.after.push(mw);
       }
-      target.$routes[propertyKey].middlewares.before.push(mw);
-    }
-    if (descriptor) {
-      return descriptor;
+      if (descriptor) {
+        return descriptor;
+      }
+    } else {
+      console.error(`No existe un path definido para el m\xE9todo ${propertyKey} de la clase ${target.constructor.name}.
+Intenta definir primero sus middlewares y despu\xE9s el path con los decoradores @All, @Get, @Post, @Put o @Delete.`);
     }
   };
 }
-function On(methods, path2) {
+function Before(mws) {
   return (target, propertyKey, descriptor) => {
-    registerRoute(target, propertyKey, descriptor);
-    target.$routes[propertyKey].methods = Array.isArray(methods) ? methods : [methods];
-    target.$routes[propertyKey].path = path2;
+    const route = findRoute(target, propertyKey);
+    if (route) {
+      for (let mw of mws) {
+        if (typeof mw === "string") {
+          if (!target.hasOwnProperty(mw)) {
+            console.error(`
+${target.name}: El middleware ${mw} no est\xE1 declarado!`);
+            if (descriptor) {
+              return descriptor;
+            }
+          }
+          mw = target[mw];
+        }
+        const { path: path2, method } = findRoute(target, propertyKey);
+        target.$routes[path2][method].middlewares.before.push(mw);
+      }
+      if (descriptor) {
+        return descriptor;
+      }
+    } else {
+      console.error(`No existe un path definido para el m\xE9todo ${propertyKey} de la clase ${target.constructor.name}.
+Intenta definir primero sus middlewares y despu\xE9s el path con los decoradores @All, @Get, @Post, @Put o @Delete.`);
+    }
+  };
+}
+function Get(path2) {
+  return (target, propertyKey, descriptor) => {
+    registerRoute({
+      path: path2,
+      method: "get",
+      target,
+      propertyKey,
+      descriptor
+    });
     return descriptor;
   };
 }
-var METHODS = {
-  GET: "get",
-  POST: "post",
-  PUT: "put",
-  DELETE: "delete",
-  ALL: ""
-};
+function Post(path2) {
+  return (target, propertyKey, descriptor) => {
+    registerRoute({
+      path: path2,
+      method: "post",
+      target,
+      propertyKey,
+      descriptor
+    });
+    return descriptor;
+  };
+}
+function Put(path2) {
+  return (target, propertyKey, descriptor) => {
+    registerRoute({
+      path: path2,
+      method: "put",
+      target,
+      propertyKey,
+      descriptor
+    });
+    return descriptor;
+  };
+}
+function Delete(path2) {
+  return (target, propertyKey, descriptor) => {
+    registerRoute({
+      path: path2,
+      method: "delete",
+      target,
+      propertyKey,
+      descriptor
+    });
+    return descriptor;
+  };
+}
 
 // controllers/apis/middlewares/dev-mode.ts
 function verifyDevMode() {
@@ -350,13 +460,14 @@ __decorateClass([
   Model("AppsModel")
 ], AppController.prototype, "appsModel", 2);
 __decorateClass([
-  On(METHODS.GET, "/:packagename")
+  Get("/:packagename")
 ], AppController.prototype, "app", 1);
 __decorateClass([
-  On(METHODS.GET, "/:packagename/*")
+  Get("/:packagename/*")
 ], AppController.prototype, "source", 1);
 AppController = __decorateClass([
-  Namespace("/app", { before: [devMode, verifySession, verifyApp] })
+  Namespace("/app"),
+  Middlewares({ before: [devMode, verifySession, verifyApp] })
 ], AppController);
 
 // controllers/middlewares/file.ts
@@ -391,7 +502,6 @@ var responseFile = (req, res) => {
 };
 
 // controllers/file.ts
-var { GET } = METHODS;
 var FileController = class {
   sharedFile(req, _, next) {
     const path2 = this.fsModel.resolveSharedFile(req.params[0].split("/"));
@@ -413,15 +523,16 @@ __decorateClass([
   Model("FileSystemModel")
 ], FileController.prototype, "fsModel", 2);
 __decorateClass([
-  On(GET, "/shared/*"),
-  AfterMiddleware([responseFile])
+  After([responseFile]),
+  Get("/shared/*")
 ], FileController.prototype, "sharedFile", 1);
 __decorateClass([
-  On(GET, "/user/*"),
-  AfterMiddleware([responseFile])
+  After([responseFile]),
+  Get("/user/*")
 ], FileController.prototype, "userFile", 1);
 FileController = __decorateClass([
-  Namespace("/file", { before: [verifySession, CSP] })
+  Namespace("/file"),
+  Middlewares({ before: [verifySession, CSP] })
 ], FileController);
 
 // controllers/shared.ts
@@ -455,15 +566,14 @@ __decorateClass([
   Model("FileSystemModel")
 ], SharedController.prototype, "fsModel", 2);
 __decorateClass([
-  On(METHODS.GET, "/:id"),
-  AfterMiddleware([responseFile])
+  After([responseFile]),
+  Get("/:id")
 ], SharedController.prototype, "shared", 1);
 SharedController = __decorateClass([
   Namespace("/shared")
 ], SharedController);
 
 // controllers/launch.ts
-var { GET: GET2 } = METHODS;
 var LaunchController = class {
   responseFile(req, res) {
     const path2 = req.body;
@@ -510,15 +620,16 @@ __decorateClass([
   Model("FileSystemModel")
 ], LaunchController.prototype, "fsModel", 2);
 __decorateClass([
-  On(GET2, "/shared/*"),
-  AfterMiddleware(["responseFile"])
+  After(["responseFile"]),
+  Get("/shared/*")
 ], LaunchController.prototype, "sharedFile", 1);
 __decorateClass([
-  On(GET2, "/user/*"),
-  AfterMiddleware(["responseFile"])
+  After(["responseFile"]),
+  Get("/user/*")
 ], LaunchController.prototype, "userFile", 1);
 LaunchController = __decorateClass([
-  Namespace("/launch", { before: [verifySession, CSP] })
+  Namespace("/launch"),
+  Middlewares({ before: [verifySession, CSP] })
 ], LaunchController);
 
 // controllers/apis/middlewares/permissions.ts
@@ -920,7 +1031,7 @@ var DENIED_ERROR2 = {
   code: "access-denied",
   message: "No tienes permiso para hacer esto!"
 };
-async function decryptRequest(req, res, next) {
+async function decryptRequest(req, _, next) {
   if (verifyDevMode.bind(this)()) {
     next();
     return;
@@ -1043,7 +1154,6 @@ var USERS = {
 };
 
 // controllers/apis/apps.ts
-var { GET: GET3, PUT, DELETE } = METHODS;
 var AppsAPIController = class {
   async apps(_, res) {
     const results = await this.appsModel.getApps();
@@ -1112,28 +1222,28 @@ __decorateClass([
   Model("AppsModel")
 ], AppsAPIController.prototype, "appsModel", 2);
 __decorateClass([
-  On(GET3, "/"),
-  BeforeMiddleware([verifyPermission(APPS.APPS)])
+  Before([verifyPermission(APPS.APPS)]),
+  Get("/")
 ], AppsAPIController.prototype, "apps", 1);
 __decorateClass([
-  On(GET3, "/:uid"),
-  BeforeMiddleware([verifyPermission(APPS.APPS_BY_UID)])
+  Before([verifyPermission(APPS.APPS_BY_UID)]),
+  Get("/:uid")
 ], AppsAPIController.prototype, "appsByUID", 1);
 __decorateClass([
-  On(PUT, "/"),
-  BeforeMiddleware([verifyPermission(APPS.INSTALL), (0, import_express_fileupload.default)()])
+  Before([verifyPermission(APPS.INSTALL), (0, import_express_fileupload.default)()]),
+  Put("/")
 ], AppsAPIController.prototype, "install", 1);
 __decorateClass([
-  On(DELETE, "/:package_name"),
-  BeforeMiddleware([verifyPermission(APPS.UNINSTALL)])
+  Before([verifyPermission(APPS.UNINSTALL)]),
+  Delete("/:package_name")
 ], AppsAPIController.prototype, "unInstall", 1);
 AppsAPIController = __decorateClass([
-  Namespace("api/apps", { before: [verifySession2, decryptRequest] })
+  Namespace("api/apps"),
+  Middlewares({ before: [verifySession2, decryptRequest] })
 ], AppsAPIController);
 
 // controllers/apis/auth.ts
 var import_uuid2 = require("uuid");
-var { GET: GET4, POST, DELETE: DELETE2 } = METHODS;
 var AuthAPIController = class {
   async index(req, res) {
     if (req.session.user || this.devModeModel.devMode.enable) {
@@ -1194,16 +1304,16 @@ __decorateClass([
   Model("PermissionsModel")
 ], AuthAPIController.prototype, "permissionsModel", 2);
 __decorateClass([
-  On(GET4, "/"),
-  BeforeMiddleware([verifyPermission(AUTH.INDEX)])
+  Before([verifyPermission(AUTH.INDEX)]),
+  Get("/")
 ], AuthAPIController.prototype, "index", 1);
 __decorateClass([
-  On(POST, "/"),
-  BeforeMiddleware([verifyPermission(AUTH.LOGIN), decryptRequest])
+  Before([verifyPermission(AUTH.LOGIN), decryptRequest]),
+  Post("/")
 ], AuthAPIController.prototype, "login", 1);
 __decorateClass([
-  On(DELETE2, "/"),
-  BeforeMiddleware([verifyPermission(AUTH.LOGOUT)])
+  Before([verifyPermission(AUTH.LOGOUT)]),
+  Delete("/")
 ], AuthAPIController.prototype, "logout", 1);
 AuthAPIController = __decorateClass([
   Namespace("api/auth")
@@ -1211,7 +1321,6 @@ AuthAPIController = __decorateClass([
 
 // controllers/apis/fs.ts
 var import_express_fileupload2 = __toESM(require("express-fileupload"));
-var { POST: POST2, PUT: PUT2, DELETE: DELETE3 } = METHODS;
 var FileSystemAPIController = class {
   filter(req, res) {
     let items = req.result;
@@ -1367,57 +1476,57 @@ __decorateClass([
   Model("FileSystemModel")
 ], FileSystemAPIController.prototype, "fsModel", 2);
 __decorateClass([
-  On(POST2, "/shared/list"),
-  BeforeMiddleware([verifyPermission(FS.SHARED_DRIVE)]),
-  AfterMiddleware(["filter"])
+  Before([verifyPermission(FS.SHARED_DRIVE)]),
+  After(["filter"]),
+  Post("/shared/list")
 ], FileSystemAPIController.prototype, "sharedDrive", 1);
 __decorateClass([
-  On(POST2, "/user/list"),
-  BeforeMiddleware([verifyPermission(FS.USER_DRIVE)]),
-  AfterMiddleware(["filter"])
+  Before([verifyPermission(FS.USER_DRIVE)]),
+  After(["filter"]),
+  Post("/user/list")
 ], FileSystemAPIController.prototype, "userDrive", 1);
 __decorateClass([
-  On(POST2, "/shared"),
-  BeforeMiddleware([verifyPermission(FS.MKDIR_SHARED_DRIVE)])
+  Before([verifyPermission(FS.MKDIR_SHARED_DRIVE)]),
+  Post("/shared")
 ], FileSystemAPIController.prototype, "mkdirSharedDrive", 1);
 __decorateClass([
-  On(POST2, "/user"),
-  BeforeMiddleware([verifyPermission(FS.MKDIR_USER_DRIVE)])
+  Before([verifyPermission(FS.MKDIR_USER_DRIVE)]),
+  Post("/user")
 ], FileSystemAPIController.prototype, "mkdirUserDrive", 1);
 __decorateClass([
-  On(PUT2, "/shared"),
-  BeforeMiddleware([verifyPermission(FS.UPLOAD_SHARED_DRIVE)])
+  Before([verifyPermission(FS.UPLOAD_SHARED_DRIVE)]),
+  Put("/shared")
 ], FileSystemAPIController.prototype, "uploadSharedDrive", 1);
 __decorateClass([
-  On(PUT2, "/user"),
-  BeforeMiddleware([verifyPermission(FS.UPLOAD_USER_DRIVE)])
+  Before([verifyPermission(FS.UPLOAD_USER_DRIVE)]),
+  Put("/user")
 ], FileSystemAPIController.prototype, "uploadUserDrive", 1);
 __decorateClass([
-  On(DELETE3, "/shared"),
-  BeforeMiddleware([verifyPermission(FS.RM_SHARED_DRIVE)])
+  Before([verifyPermission(FS.RM_SHARED_DRIVE)]),
+  Delete("/shared")
 ], FileSystemAPIController.prototype, "rmSharedDrive", 1);
 __decorateClass([
-  On(DELETE3, "/user"),
-  BeforeMiddleware([verifyPermission(FS.RM_USER_DRIVE)])
+  Before([verifyPermission(FS.RM_USER_DRIVE)]),
+  Delete("/user")
 ], FileSystemAPIController.prototype, "rmUserDrive", 1);
 __decorateClass([
-  On(POST2, "/copy"),
-  BeforeMiddleware([verifyPermission(FS.COPY)])
+  Before([verifyPermission(FS.COPY)]),
+  Post("/copy")
 ], FileSystemAPIController.prototype, "copy", 1);
 __decorateClass([
-  On(POST2, "/move"),
-  BeforeMiddleware([verifyPermission(FS.MOVE)])
+  Before([verifyPermission(FS.MOVE)]),
+  Post("/move")
 ], FileSystemAPIController.prototype, "move", 1);
 __decorateClass([
-  On(POST2, "/rename"),
-  BeforeMiddleware([verifyPermission(FS.RENAME)])
+  Before([verifyPermission(FS.RENAME)]),
+  Post("/rename")
 ], FileSystemAPIController.prototype, "rename", 1);
 FileSystemAPIController = __decorateClass([
-  Namespace("/api/fs", { before: [verifySession2, decryptRequest, (0, import_express_fileupload2.default)()] })
+  Namespace("/api/fs"),
+  Middlewares({ before: [verifySession2, decryptRequest, (0, import_express_fileupload2.default)()] })
 ], FileSystemAPIController);
 
 // controllers/apis/permissions.ts
-var { GET: GET5, POST: POST3, DELETE: DELETE4 } = METHODS;
 var PermissionsAPIController = class {
   async find(req, res) {
     const { package_name, api, active } = req.query;
@@ -1452,23 +1561,23 @@ __decorateClass([
   Model("PermissionsModel")
 ], PermissionsAPIController.prototype, "permissionModel", 2);
 __decorateClass([
-  On(GET5, "/"),
-  BeforeMiddleware([verifyPermission(PERMISSIONS.FIND)])
+  Before([verifyPermission(PERMISSIONS.FIND)]),
+  Get("/")
 ], PermissionsAPIController.prototype, "find", 1);
 __decorateClass([
-  On(POST3, "/:id"),
-  BeforeMiddleware([verifyPermission(PERMISSIONS.ENABLE)])
+  Before([verifyPermission(PERMISSIONS.ENABLE)]),
+  Post("/:id")
 ], PermissionsAPIController.prototype, "enable", 1);
 __decorateClass([
-  On(DELETE4, "/:id"),
-  BeforeMiddleware([verifyPermission(PERMISSIONS.DISABLE)])
+  Before([verifyPermission(PERMISSIONS.DISABLE)]),
+  Delete("/:id")
 ], PermissionsAPIController.prototype, "disable", 1);
 PermissionsAPIController = __decorateClass([
-  Namespace("api/permissions", { before: [verifySession2] })
+  Namespace("api/permissions"),
+  Middlewares({ before: [verifySession2] })
 ], PermissionsAPIController);
 
 // controllers/apis/profile.ts
-var { GET: GET6, POST: POST4, PUT: PUT3 } = METHODS;
 var ProfileAPIController = class {
   index(req, res) {
     res.json(req.session.user);
@@ -1557,35 +1666,35 @@ __decorateClass([
   Model("UsersModel")
 ], ProfileAPIController.prototype, "usersModel", 2);
 __decorateClass([
-  On(GET6, "/"),
-  BeforeMiddleware([verifyPermission(PROFILE.INDEX)])
+  Before([verifyPermission(PROFILE.INDEX)]),
+  Get("/")
 ], ProfileAPIController.prototype, "index", 1);
 __decorateClass([
-  On(GET6, "/apps"),
-  BeforeMiddleware([verifyPermission(PROFILE.APPS)])
+  Before([verifyPermission(PROFILE.APPS)]),
+  Get("/apps")
 ], ProfileAPIController.prototype, "apps", 1);
 __decorateClass([
-  On(GET6, "/config"),
-  BeforeMiddleware([verifyPermission(PROFILE.READ_CONFIG)])
+  Before([verifyPermission(PROFILE.READ_CONFIG)]),
+  Get("/config")
 ], ProfileAPIController.prototype, "getConfig", 1);
 __decorateClass([
-  On(POST4, "/"),
-  BeforeMiddleware([verifyPermission(PROFILE.UPDATE), decryptRequest])
+  Before([verifyPermission(PROFILE.UPDATE), decryptRequest]),
+  Post("/")
 ], ProfileAPIController.prototype, "update", 1);
 __decorateClass([
-  On(POST4, "/config"),
-  BeforeMiddleware([verifyPermission(PROFILE.WRITE_CONFIG), decryptRequest])
+  Before([verifyPermission(PROFILE.WRITE_CONFIG), decryptRequest]),
+  Post("/config")
 ], ProfileAPIController.prototype, "setConfig", 1);
 __decorateClass([
-  On(PUT3, "/"),
-  BeforeMiddleware([verifyPermission(PROFILE.UPDATE_PASSWORD), decryptRequest])
+  Before([verifyPermission(PROFILE.UPDATE_PASSWORD), decryptRequest]),
+  Put("/")
 ], ProfileAPIController.prototype, "updatePassword", 1);
 ProfileAPIController = __decorateClass([
-  Namespace("api/profile", { before: [verifySession2] })
+  Namespace("api/profile"),
+  Middlewares({ before: [verifySession2] })
 ], ProfileAPIController);
 
 // controllers/apis/recycle-bin.ts
-var { GET: GET7, POST: POST5, PUT: PUT4, DELETE: DELETE5 } = METHODS;
 var RecycleBinController = class {
   async list(req, res) {
     const results = await this.recycleBinModel.findByUID(req.session.user?.uid || NaN);
@@ -1641,32 +1750,32 @@ __decorateClass([
   Model("RecycleBinModel")
 ], RecycleBinController.prototype, "recycleBinModel", 2);
 __decorateClass([
-  On(GET7, "/"),
-  BeforeMiddleware([verifyPermission(RECYCLE_BIN.LIST)])
+  Before([verifyPermission(RECYCLE_BIN.LIST)]),
+  Get("/")
 ], RecycleBinController.prototype, "list", 1);
 __decorateClass([
-  On(POST5, "/"),
-  BeforeMiddleware([verifyPermission(RECYCLE_BIN.CREATE)])
+  Before([verifyPermission(RECYCLE_BIN.CREATE)]),
+  Post("/")
 ], RecycleBinController.prototype, "create", 1);
 __decorateClass([
-  On(PUT4, "/:id"),
-  BeforeMiddleware([verifyPermission(RECYCLE_BIN.RESTORE)])
+  Before([verifyPermission(RECYCLE_BIN.RESTORE)]),
+  Put("/:id")
 ], RecycleBinController.prototype, "restore", 1);
 __decorateClass([
-  On(DELETE5, "/:id"),
-  BeforeMiddleware([verifyPermission(RECYCLE_BIN.DELETE)])
+  Before([verifyPermission(RECYCLE_BIN.DELETE)]),
+  Delete("/:id")
 ], RecycleBinController.prototype, "delete", 1);
 __decorateClass([
-  On(DELETE5, "/"),
-  BeforeMiddleware([verifyPermission(RECYCLE_BIN.CLEAN)])
+  Before([verifyPermission(RECYCLE_BIN.CLEAN)]),
+  Delete("/")
 ], RecycleBinController.prototype, "clean", 1);
 RecycleBinController = __decorateClass([
-  Namespace("/api/recycle-bin", { before: [verifySession2, decryptRequest] })
+  Namespace("/api/recycle-bin"),
+  Middlewares({ before: [verifySession2, decryptRequest] })
 ], RecycleBinController);
 
 // controllers/apis/shared.ts
 var import_uuid3 = require("uuid");
-var { GET: GET8, POST: POST6, DELETE: DELETE6 } = METHODS;
 var SharedAPIController = class {
   async index(req, res) {
     const results = await this.sharedModel.find({ uid: req.session.user?.name });
@@ -1704,23 +1813,23 @@ __decorateClass([
   Model("SharedModel")
 ], SharedAPIController.prototype, "sharedModel", 2);
 __decorateClass([
-  On(GET8, "/"),
-  BeforeMiddleware([verifyPermission(SHARED.INDEX)])
+  Before([verifyPermission(SHARED.INDEX)]),
+  Get("/")
 ], SharedAPIController.prototype, "index", 1);
 __decorateClass([
-  On(POST6, "/"),
-  BeforeMiddleware([verifyPermission(SHARED.CREATE)])
+  Before([verifyPermission(SHARED.CREATE)]),
+  Post("/")
 ], SharedAPIController.prototype, "create", 1);
 __decorateClass([
-  On(DELETE6, "/:id"),
-  BeforeMiddleware([verifyPermission(SHARED.DELETE)])
+  Before([verifyPermission(SHARED.DELETE)]),
+  Delete("/:id")
 ], SharedAPIController.prototype, "delete", 1);
 SharedAPIController = __decorateClass([
-  Namespace("/api/shared", { before: [verifySession2, decryptRequest] })
+  Namespace("/api/shared"),
+  Middlewares({ before: [verifySession2, decryptRequest] })
 ], SharedAPIController);
 
 // controllers/apis/sources.ts
-var { GET: GET9, POST: POST7, DELETE: DELETE7 } = METHODS;
 var SecureSourcesAPIController = class {
   async find(req, res) {
     const { package_name, type, active } = req.query;
@@ -1758,23 +1867,23 @@ __decorateClass([
   Model("SourcesModel")
 ], SecureSourcesAPIController.prototype, "sourcesModel", 2);
 __decorateClass([
-  On(GET9, "/"),
-  BeforeMiddleware([verifyPermission(SOURCES.FIND)])
+  Before([verifyPermission(SOURCES.FIND)]),
+  Get("/")
 ], SecureSourcesAPIController.prototype, "find", 1);
 __decorateClass([
-  On(POST7, "/:id"),
-  BeforeMiddleware([verifyPermission(SOURCES.ENABLE)])
+  Before([verifyPermission(SOURCES.ENABLE)]),
+  Post("/:id")
 ], SecureSourcesAPIController.prototype, "enable", 1);
 __decorateClass([
-  On(DELETE7, "/:id"),
-  BeforeMiddleware([verifyPermission(SOURCES.DISABLE)])
+  Before([verifyPermission(SOURCES.DISABLE)]),
+  Delete("/:id")
 ], SecureSourcesAPIController.prototype, "disable", 1);
 SecureSourcesAPIController = __decorateClass([
-  Namespace("api/sources", { before: [verifySession2] })
+  Namespace("api/sources"),
+  Middlewares({ before: [verifySession2] })
 ], SecureSourcesAPIController);
 
 // controllers/apis/storages.ts
-var { GET: GET10, PUT: PUT5 } = METHODS;
 function verifyPermission2(req, res, next) {
   const devModel = this.devModeModel;
   if (devModel.devMode.enable) {
@@ -1845,27 +1954,27 @@ __decorateClass([
   Model("StorageModel")
 ], StoragesAPIController.prototype, "storageModel", 2);
 __decorateClass([
-  On(GET10, "/:name"),
-  BeforeMiddleware([filterPath(true)])
+  Before([filterPath(true)]),
+  Get("/:name")
 ], StoragesAPIController.prototype, "globalStore", 1);
 __decorateClass([
-  On(GET10, "/user/:name"),
-  BeforeMiddleware([filterPath(false)])
+  Before([filterPath(false)]),
+  Get("/user/:name")
 ], StoragesAPIController.prototype, "userStore", 1);
 __decorateClass([
-  On(PUT5, "/:name"),
-  BeforeMiddleware([filterPath(true)])
+  Before([filterPath(true)]),
+  Put("/:name")
 ], StoragesAPIController.prototype, "setGlobalStore", 1);
 __decorateClass([
-  On(PUT5, "/user/:name"),
-  BeforeMiddleware([filterPath(false)])
+  Before([filterPath(false)]),
+  Put("/user/:name")
 ], StoragesAPIController.prototype, "setUserStore", 1);
 StoragesAPIController = __decorateClass([
-  Namespace("/api/storage", { before: [verifySession2, verifyPermission2] })
+  Namespace("/api/storage"),
+  Middlewares({ before: [verifySession2, verifyPermission2] })
 ], StoragesAPIController);
 
 // controllers/apis/users.ts
-var { GET: GET11, POST: POST8, PUT: PUT6, DELETE: DELETE8 } = METHODS;
 var UsersAPIController = class {
   index(_, res) {
     const results = this.usersModel.getUsers();
@@ -1973,35 +2082,36 @@ __decorateClass([
   Model("DevModeModel")
 ], UsersAPIController.prototype, "devModeModel", 2);
 __decorateClass([
-  On(GET11, "/"),
-  BeforeMiddleware([verifyPermission(USERS.INDEX)])
+  Before([verifyPermission(USERS.INDEX)]),
+  Get("/")
 ], UsersAPIController.prototype, "index", 1);
 __decorateClass([
-  On(GET11, "/:uid"),
-  BeforeMiddleware([verifyPermission(USERS.USER)])
+  Before([verifyPermission(USERS.USER)]),
+  Get("/:uid")
 ], UsersAPIController.prototype, "user", 1);
 __decorateClass([
-  On(POST8, "/"),
-  BeforeMiddleware([verifyPermission(USERS.CREATE), decryptRequest])
+  Before([verifyPermission(USERS.CREATE), decryptRequest]),
+  Post("/")
 ], UsersAPIController.prototype, "create", 1);
 __decorateClass([
-  On(PUT6, "/:uid"),
-  BeforeMiddleware([verifyPermission(USERS.UPDATE), decryptRequest])
+  Before([verifyPermission(USERS.UPDATE), decryptRequest]),
+  Put("/:uid")
 ], UsersAPIController.prototype, "update", 1);
 __decorateClass([
-  On(DELETE8, "/:uid"),
-  BeforeMiddleware([verifyPermission(USERS.DELETE)])
+  Before([verifyPermission(USERS.DELETE)]),
+  Delete("/:uid")
 ], UsersAPIController.prototype, "delete", 1);
 __decorateClass([
-  On(POST8, "/assign-app"),
-  BeforeMiddleware([verifyPermission(USERS.ASSIGN_APP), decryptRequest])
+  Before([verifyPermission(USERS.ASSIGN_APP), decryptRequest]),
+  Post("/assign-app")
 ], UsersAPIController.prototype, "assignApp", 1);
 __decorateClass([
-  On(POST8, "/unassign-app"),
-  BeforeMiddleware([verifyPermission(USERS.UNASSIGN_APP), decryptRequest])
+  Before([verifyPermission(USERS.UNASSIGN_APP), decryptRequest]),
+  Post("/unassign-app")
 ], UsersAPIController.prototype, "unassignApp", 1);
 UsersAPIController = __decorateClass([
-  Namespace("/api/users", { before: [verifySession2] })
+  Namespace("/api/users"),
+  Middlewares({ before: [verifySession2] })
 ], UsersAPIController);
 
 // controllers/apis/index.ts
@@ -2043,14 +2153,13 @@ __decorateClass([
   Model("BuilderModel")
 ], APIController.prototype, "builderModel", 2);
 __decorateClass([
-  On(METHODS.GET, "/connector.js")
+  Get("/connector.js")
 ], APIController.prototype, "connector", 1);
 APIController = __decorateClass([
   Namespace("/api")
 ], APIController);
 
 // controllers/index.ts
-var { GET: GET12 } = METHODS;
 var IndexController = class {
   dashboard(_, res) {
     if (this.devModeModel.devMode.enable) {
@@ -2070,12 +2179,12 @@ __decorateClass([
   Model("DevModeModel")
 ], IndexController.prototype, "devModeModel", 2);
 __decorateClass([
-  On(GET12, "/"),
-  BeforeMiddleware([devMode, CSP, tokens, verifySession])
+  Before([devMode, CSP, tokens, verifySession]),
+  Get("/")
 ], IndexController.prototype, "dashboard", 1);
 __decorateClass([
-  On(GET12, "/login"),
-  BeforeMiddleware([devMode, CSP, tokens, verifyNotSession])
+  Before([devMode, CSP, tokens, verifyNotSession]),
+  Get("/login")
 ], IndexController.prototype, "login", 1);
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
