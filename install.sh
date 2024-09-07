@@ -31,26 +31,6 @@ else
     apt-get install -y nodejs
 fi
 
-if ! dpkg -l | grep -q "^ii mongodb-org"; then
-    echo "Instalando MongoDB ..."
-    apt install -y gnupg curl
-    curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor
-    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | tee /etc/apt/sources.list.d/mongodb-org-7.0.list
-    apt update
-    apt install -y mongodb-org
-    echo "mongodb-org hold" | dpkg --set-selections
-    echo "mongodb-org-database hold" | dpkg --set-selections
-    echo "mongodb-org-server hold" | dpkg --set-selections
-    echo "mongodb-mongosh hold" | dpkg --set-selections
-    echo "mongodb-org-mongos hold" | dpkg --set-selections
-    echo "mongodb-org-tools hold" | dpkg --set-selections
-    systemctl enable mongod
-    systemctl daemon-reload
-    systemctl start mongod
-else
-    echo "MongoDB ya está instalado."
-fi
-
 if ! command -v nginx >/dev/null 2>&1; then
     echo "instalando Nginx ..."
     sudo apt update
@@ -103,4 +83,4 @@ systemctl start local-cloud
 systemctl start nginx
 IP=$(hostname -I)
 IP=$(echo "$IP" | tr -d '[[:space:]]')
-echo "Puedes iniciar sesión desde http://$IP:3001"
+echo "Puedes iniciar sesión desde https://$IP:3001"
