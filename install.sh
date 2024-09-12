@@ -7,48 +7,25 @@ fi
 
 if systemctl list-units --type=service --all | grep -q "local-cloud"; then
     echo "LocalCloud ya está instalando."
-    if [ -x ./update.sh ]; then
-        chmod +x update
-        ./update
-        exit 0
-    else
-        echo "El archivo update.sh no existe o no es ejecutable" >&2
-        exit 1
-    fi
-fi
-
-if command -v node &>/dev/null; then
-    NODE_VERSION=$(node -v | grep -oP '\d+\.\d+\.\d+')
-    NODE_MAJOR_VERSION=$(echo $NODE_VERSION | cut -d. -f1)
-    if [ "$NODE_MAJOR_VERSION" -lt 20 ]; then
-        echo "Actualizando Node.JS ..."
-        curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
-        apt-get install -y nodejs
-    fi
-else
-    echo "Instalando Nodoe.JS LTS..."
-    curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
-    apt-get install -y nodejs
 fi
 
 if ! command -v nginx >/dev/null 2>&1; then
-    echo "instalando Nginx ..."
-    sudo apt update
-    sudo apt install -y nginx
-    if [ $? -eq 0 ]; then
-        echo "nginx se ha instalado correctamente."
-        mkdir /etc/nginx/ssl_certificate
-        openssl genrsa -out /etc/nginx/ssl_certificate/key.pem
-        openssl req -new -key /etc/nginx/ssl_certificate/key.pem -out /etc/nginx/ssl_certificate/csr.pem -config ./openssl.cnf
-        openssl x509 -req -days 9999 -in /etc/nginx/ssl_certificate/csr.pem -signkey /etc/nginx/ssl_certificate/key.pem -out /etc/nginx/ssl_certificate/cert.pem
-        systemctl enable nginx
-        systemctl stop nginx
-    else
-        echo "Hubo un problema al instalar nginx."
-        exit 1
-    fi
+	echo "instalando Nginx ..."
+	apt install -y nginx
+	if [ $? -eq 0 ]; then
+		echo "nginx se ha instalado correctamente."
+		mkdir /etc/nginx/ssl_certificate
+		openssl genrsa -out /etc/nginx/ssl_certificate/key.pem
+		openssl req -new -key /etc/nginx/ssl_certificate/key.pem -out /etc/nginx/ssl_certificate/csr.pem -config ./openssl.cnf
+		openssl x509 -req -days 9999 -in /etc/nginx/ssl_certificate/csr.pem -signkey /etc/nginx/ssl_certificate/key.pem -out /etc/nginx/ssl_certificate/cert.pem
+		systemctl enable nginx
+		systemctl stop nginx
+	else
+		echo "Hubo un problema al instalar nginx."
+		exit 1
+	fi
 else
-    systemctl stop nginx
+	systemctl stop nginx
 fi
 
 if ! dpkg -l | grep -qw samba; then
@@ -63,24 +40,17 @@ if ! dpkg -l | grep -qw samba; then
     fi
 fi
 
-initial_path=$(pwd)
-cp -r ./local-cloud /etc
-cd /etc/local-cloud
-npm i
-cd "$initial_path"
-cp ./local-cloud.service /etc/systemd/system
-mkdir /var/log/local-cloud
-systemctl daemon-reload
-systemctl enable local-cloud
-
 if ! grep -q "^lc:" /etc/group; then
     groupadd lc
 fi
 
 chmod +x ./install
 ./install
+
+systemctl daemon-reload
+systemctl enable local-cloud
 systemctl start local-cloud
 systemctl start nginx
 IP=$(hostname -I)
 IP=$(echo "$IP" | tr -d '[[:space:]]')
-echo "Puedes iniciar sesión desde https://$IP:3001"
+echo "Puedes iniciar sesión desde https://$IP"

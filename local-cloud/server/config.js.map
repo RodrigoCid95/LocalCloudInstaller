@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": ["../../node_modules/px.io/mods/configs.ts"],
-  "sourcesContent": ["class Configs {\n  #profiles = {}\n  constructor() {\n    const configPath = './configurations.js'\n    const configModule = require(configPath)\n    const indices = Object.keys(configModule)\n    for (const indice of indices) {\n      Object.defineProperty(this.#profiles, indice, { value: configModule[indice], writable: false })\n    }\n  }\n  get = (name) => this.#profiles[name]\n}\nexport const configs = new Configs()"],
-  "mappings": ";;;;;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA,IAAM,UAAN,MAAc;AAAA,EAEZ,cAAc;AADd,qBAAY,CAAC;AASb,eAAM,CAAC,SAAS,KAAK,UAAU,IAAI;AAPjC,UAAM,aAAa;AACnB,UAAM,eAAe,QAAQ,UAAU;AACvC,UAAM,UAAU,OAAO,KAAK,YAAY;AACxC,eAAW,UAAU,SAAS;AAC5B,aAAO,eAAe,KAAK,WAAW,QAAQ,EAAE,OAAO,aAAa,MAAM,GAAG,UAAU,MAAM,CAAC;AAAA,IAChG;AAAA,EACF;AAAA,EARA;AAUF;AACO,IAAM,UAAU,IAAI,QAAQ;",
-  "names": []
-}

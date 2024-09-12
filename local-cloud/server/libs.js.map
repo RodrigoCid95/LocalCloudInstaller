@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": ["../../node_modules/px.io/mods/libs.ts"],
-  "sourcesContent": ["class Libraries {\n  #instances = {}\n  constructor() {\n    const libsPath = './libraries.js'\n    const libsModule = require(libsPath)\n    const indices = Object.keys(libsModule)\n    for (const indice of indices) {\n      const libResult = libsModule[indice]()\n      if (libResult instanceof Promise) {\n        libResult\n          .then(lib => Object.defineProperty(this.#instances, indice, { value: lib, writable: false }))\n          .catch(error => console.error(error))\n      } else {\n        Object.defineProperty(this.#instances, indice, { value: libResult, writable: false })\n      }\n    }\n  }\n  get = (name) => this.#instances[name]\n}\nexport const libraries = new Libraries()"],
-  "mappings": ";;;;;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA,IAAM,YAAN,MAAgB;AAAA,EAEd,cAAc;AADd,sBAAa,CAAC;AAgBd,eAAM,CAAC,SAAS,KAAK,WAAW,IAAI;AAdlC,UAAM,WAAW;AACjB,UAAM,aAAa,QAAQ,QAAQ;AACnC,UAAM,UAAU,OAAO,KAAK,UAAU;AACtC,eAAW,UAAU,SAAS;AAC5B,YAAM,YAAY,WAAW,MAAM,EAAE;AACrC,UAAI,qBAAqB,SAAS;AAChC,kBACG,KAAK,SAAO,OAAO,eAAe,KAAK,YAAY,QAAQ,EAAE,OAAO,KAAK,UAAU,MAAM,CAAC,CAAC,EAC3F,MAAM,WAAS,QAAQ,MAAM,KAAK,CAAC;AAAA,MACxC,OAAO;AACL,eAAO,eAAe,KAAK,YAAY,QAAQ,EAAE,OAAO,WAAW,UAAU,MAAM,CAAC;AAAA,MACtF;AAAA,IACF;AAAA,EACF;AAAA,EAfA;AAiBF;AACO,IAAM,YAAY,IAAI,UAAU;",
-  "names": []
-}

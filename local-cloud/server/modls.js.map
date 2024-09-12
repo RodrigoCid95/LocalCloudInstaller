@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": ["../../node_modules/px.io/mods/modls.ts"],
-  "sourcesContent": ["class Models {\n  #instances = {}\n  constructor() {\n    const modelsPath = './models.js'\n    const modelsModule = require(modelsPath)\n    const indices = Object.keys(modelsModule)\n    for (const indice of indices) {\n      const Model = modelsModule[indice]\n      if (Model.prototype) {\n        Object.defineProperty(this.#instances, indice, { value: new Model(), writable: false })\n      }\n    }\n  }\n  get = (name) => this.#instances[name]\n}\nexport const models = new Models()"],
-  "mappings": ";;;;;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA,IAAM,SAAN,MAAa;AAAA,EAEX,cAAc;AADd,sBAAa,CAAC;AAYd,eAAM,CAAC,SAAS,KAAK,WAAW,IAAI;AAVlC,UAAM,aAAa;AACnB,UAAM,eAAe,QAAQ,UAAU;AACvC,UAAM,UAAU,OAAO,KAAK,YAAY;AACxC,eAAW,UAAU,SAAS;AAC5B,YAAM,QAAQ,aAAa,MAAM;AACjC,UAAI,MAAM,WAAW;AACnB,eAAO,eAAe,KAAK,YAAY,QAAQ,EAAE,OAAO,IAAI,MAAM,GAAG,UAAU,MAAM,CAAC;AAAA,MACxF;AAAA,IACF;AAAA,EACF;AAAA,EAXA;AAaF;AACO,IAAM,SAAS,IAAI,OAAO;",
-  "names": []
-}
