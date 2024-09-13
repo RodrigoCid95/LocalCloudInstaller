@@ -120,7 +120,10 @@
       const { uid } = uList.find(user => user.name === name)
       const appsPath = path.resolve('.', 'apps')
       const appNames = fs.readdirSync(appsPath)
-      for (const package_name of appNames) {
+      for (const appName of appNames) {
+        const name = appName.split('.')
+        name.pop()
+        const package_name = name.join('.')
         await send({
           api: 'users/assign-app',
           data: { uid, package_name }
