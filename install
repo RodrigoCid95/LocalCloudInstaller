@@ -66,12 +66,6 @@
   const { spawn } = require('node:child_process')
   const fs = require('node:fs')
   const path = require('node:path')
-  const destPath = path.resolve('/', 'etc', 'local-cloud')
-  if (fs.existsSync(destPath)) {
-    fs.rmSync(destPath, { force: true, recursive: true })
-  }
-  fs.mkdirSync(destPath, { recursive: true })
-  fs.cpSync(path.join(__dirname, 'local-cloud'), destPath, { force: true, recursive: true })
   const serverProcess = spawn(path.join(destPath, 'local-cloud'), ['--maintenance-mode'], { cwd: destPath })
   await new Promise(resolve => serverProcess.stdout.on('data', (data) => {
     if (data.includes('corriendo')) {
@@ -92,7 +86,10 @@
     for (const name of appNames) {
       console.log(`Instalando ${name}`)
       const appPath = path.join(appsPath, name)
-      const installProcess = spawn('curl', ['--location', '--request', 'PUT', '-F', `package_zip=@"${appPath}"`, '-s', 'http://localhost:3000/api/apps'])
+      const nameSegments = name.split('.')
+      nameSegments.pop()
+      const packageName = nameSegments.join('.')
+      const installProcess = spawn('curl', ['--location', '--request', 'PUT', '-F', `${packageName}=@"${appPath}"`, '-s', 'http://localhost:3000/api/apps'])
       await new Promise(resolve => installProcess.on('close', resolve))
     }
   }
@@ -142,6 +139,7 @@ Restart=always
 User=root
 Environment=PATH=/usr/bin:/usr/local/bin
 Environment=NODE_ENV=production
+Environment=CONFIG=/etc/local-cloud/local-cloud.conf
 StandardOutput=append:/var/log/local-cloud/local-cloud.log
 StandardError=append:/var/log/local-cloud/local-cloud-error.log
 WorkingDirectory=/etc/local-cloud
@@ -151,7 +149,6 @@ WantedBy=multi-user.target
 `
   const servicePath = path.resolve('/', 'etc', 'systemd', 'system', 'local-cloud.service')
   fs.writeFileSync(servicePath, serviceContent, 'utf-8')
-  fs.mkdirSync(path.join('/', 'var', 'log', 'local-cloud'), { recursive: true, force: true })
   const PORTS = Array
     .from({ length: numCPUs }, (_, i) => 3000 + i)
     .map(p => `    server 127.0.0.1:${p};`)
