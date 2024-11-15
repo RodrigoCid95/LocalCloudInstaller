@@ -44,8 +44,8 @@ if ! grep -q "^lc:" /etc/group; then
 	groupadd lc
 fi
 
-cp ./local-cloud /etc
-mkdir /var/local-cloud
+cp -R ./local-cloud /etc
+mkdir -p /var/local-cloud
 set -eu
 dir="/etc/local-cloud"
 platform=$(uname -ms)
